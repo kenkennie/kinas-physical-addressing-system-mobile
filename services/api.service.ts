@@ -33,7 +33,7 @@ class ApiService {
         }
         return config;
       },
-      (error) => Promise.reject(error)
+      (error) => Promise.reject(error),
     );
 
     this.client.interceptors.response.use(
@@ -43,8 +43,26 @@ class ApiService {
           await AsyncStorage.removeItem("auth_token");
         }
         return Promise.reject(error);
-      }
+      },
     );
+  }
+
+  async findParcelAtPoint(lat: number, lng: number) {
+    const response = await fetch(
+      `${API_CONFIG.BASE_URL}/land-parcel/at-point?lat=${lat}&lng=${lng}`,
+    );
+    if (!response.ok) {
+      throw new Error("No parcel at this location");
+    }
+    return response.json(); // Returns { gid: number }
+  }
+
+  async getParcelByGid(lat: number, lng: number) {
+    const response = await this.client.post("land-parcel/identify", {
+      lat,
+      lng,
+    });
+    return ParcelDetailsSchema.parse(response.data);
   }
 
   async searchAddress(params: {
@@ -64,12 +82,6 @@ class ApiService {
     return ParcelDetailsSchema.parse(response.data);
   }
 
-  async calculateRoute(routeRequest: RouteRequest) {
-    const validated = RouteRequestSchema.parse(routeRequest);
-    const response = await this.client.post("/routing/calculate", validated);
-
-    return RouteResponseSchema.parse(response.data);
-  }
   async identifyParcel(lat: number, lng: number) {
     const response = await this.client.post("land-parcel/identify", {
       lat,
@@ -96,9 +108,27 @@ class ApiService {
           geometry: z.any(),
           lat: z.number(),
           lng: z.number(),
-        })
+        }),
       )
       .parse(response.data);
+  }
+
+  async calculateRoute(request: RouteRequest) {
+    // If no origin, backend uses user's real-time location
+    const payload = {
+      ...request,
+      origin: request.origin || "current",
+    };
+
+    return this.client.post("/route/calculate", payload);
+  }
+
+  // Get routes for all entry points at once
+  async getRouteOptions(lr_no: string, origin?: Location) {
+    return this.client.post("/route/options", {
+      lr_no,
+      origin: origin || "current",
+    });
   }
 }
 

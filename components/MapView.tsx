@@ -20,20 +20,44 @@ export const MapView: React.FC = () => {
 
   const entryPoint = activeRoute?.destination?.entry_point;
 
+  const handleParcelPress = async (event: any) => {
+    const { coordinates } = event;
+
+    if (!coordinates) {
+      console.log("No coordinates in event");
+      return;
+    }
+    const { latitude: lat, longitude: lng } = coordinates;
+
+    try {
+      setLoading(true);
+      setSelectedParcel(null); // Clear previous selection
+
+      // Fetch parcel details using clicked coordinates
+      const data = await apiService.getParcelByGid(lat, lng);
+      setSelectedParcel(data);
+    } catch (error) {
+      console.log("Error fetching parcel:", error);
+      setSelectedParcel(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleMapPress = async (event: any) => {
     const { geometry } = event;
     const [lng, lat] = geometry.coordinates;
 
     try {
       setLoading(true);
-      // 1. Clear previous selection immediately for better UX
       setSelectedParcel(null);
 
-      // 2. API Call
+      // Find parcel at this point, returns GID
       const data = await apiService.identifyParcel(lat, lng);
+      // Then fetch full details
       setSelectedParcel(data);
     } catch (error) {
-      console.log("No parcel found");
+      console.log("No parcel found at this location");
       setSelectedParcel(null);
     } finally {
       setLoading(false);
@@ -56,12 +80,15 @@ export const MapView: React.FC = () => {
     };
   }, [activeRoute]);
 
-  // Auto-zoom to route when activeRoute is set
   // 2. Auto-zoom to fit the route or entry point
+  // Auto-zoom to route when active
   useEffect(() => {
     if (activeRoute && entryPoint) {
       cameraRef.current?.setCamera({
-        centerCoordinate: [entryPoint.x, entryPoint.y],
+        centerCoordinate: [
+          entryPoint.coordinates.lng,
+          entryPoint.coordinates.lat,
+        ],
         zoomLevel: 16,
         animationDuration: 1500,
       });
@@ -73,7 +100,7 @@ export const MapView: React.FC = () => {
       <MapboxGL.MapView
         ref={mapRef}
         style={styles.map}
-        onPress={handleMapPress} // Add click handler
+        onPress={handleMapPress} // Fallback for empty areas
       >
         <MapboxGL.Camera
           ref={cameraRef}
@@ -82,7 +109,6 @@ export const MapView: React.FC = () => {
             MAPBOX_CONFIG.NAIROBI_CENTER.longitude,
             MAPBOX_CONFIG.NAIROBI_CENTER.latitude,
           ]}
-          // followUserLocation={!activeRoute}
         />
         <MapboxGL.UserLocation visible={true} />
 
@@ -95,7 +121,7 @@ export const MapView: React.FC = () => {
             <MapboxGL.LineLayer
               id="routeLine"
               style={{
-                lineColor: "#3182ce", // Bright Blue
+                lineColor: "#3182ce",
                 lineWidth: 5,
                 lineCap: "round",
                 lineJoin: "round",
@@ -109,7 +135,10 @@ export const MapView: React.FC = () => {
         {entryPoint && (
           <MapboxGL.PointAnnotation
             id="destinationMarker"
-            coordinate={[entryPoint.x, entryPoint.y]}
+            coordinate={[
+              entryPoint.coordinates.lng,
+              entryPoint.coordinates.lat,
+            ]}
           >
             <View style={styles.destinationMarker}>
               <Text style={styles.markerText}>EP {entryPoint.label}</Text>
@@ -117,54 +146,69 @@ export const MapView: React.FC = () => {
           </MapboxGL.PointAnnotation>
         )}
 
-        {/* Vector Tile Source - Parcels from your backend */}
+        {/* Vector Tile Source - Parcels */}
         <MapboxGL.VectorSource
           id="parcels-source"
           tileUrlTemplates={[
             `${API_CONFIG.BASE_URL}/land-parcel/tiles/{z}/{x}/{y}.mvt`,
           ]}
+          minZoomLevel={12} // Optimize: don't load at low zoom
+          maxZoomLevel={20}
+          onPress={handleParcelPress} // Handle clicks on parcels
         >
           {/* Fill layer - parcel polygons */}
           <MapboxGL.FillLayer
             id="parcels-fill"
             sourceLayerID="parcels"
-            minZoomLevel={5}
+            minZoomLevel={12}
             style={{
               fillColor: "#dcf4dc",
               fillOpacity: 0.5,
-              fillOutlineColor: "#3d3d3d",
             }}
           />
 
+          {/* Outline layer */}
+          <MapboxGL.LineLayer
+            id="parcels-outline"
+            sourceLayerID="parcels"
+            minZoomLevel={12}
+            style={{
+              lineColor: "#3d3d3d",
+              lineWidth: 1,
+              lineOpacity: 0.6,
+            }}
+          />
+
+          {/* Highlight selected parcel */}
           <MapboxGL.LineLayer
             id="parcel-highlight"
             sourceLayerID="parcels"
             filter={[
               "==",
-              ["get", "lr_no"],
-              selectedParcel?.parcel?.lr_no || "INVALID_ID",
+              ["get", "gid"], // Use GID for filtering
+              selectedParcel?.parcel?.gid || -1,
             ]}
             style={{
-              lineColor: "#FFD700", // Gold/Yellow highlight
+              lineColor: "#ff6a0099",
               lineWidth: 4,
               lineOpacity: 1,
             }}
           />
 
+          {/* Labels */}
           <MapboxGL.SymbolLayer
             id="parcels-label"
             sourceLayerID="parcels"
-            minZoomLevel={14} // Only show text when zoomed in closer
+            minZoomLevel={14}
             style={{
-              textField: ["get", "lr_no"], // Get the 'lr_no' field from the DB
+              textField: ["get", "lr_no"],
               textSize: 12,
               textColor: "#000000",
+              textHaloColor: "#FFFFFF",
               textHaloWidth: 2,
             }}
           />
         </MapboxGL.VectorSource>
-
-        {/* Rest of your markers */}
       </MapboxGL.MapView>
     </View>
   );

@@ -12,8 +12,20 @@ export const CoordinateSchema = z
 const EntryPointSchema = z.object({
   gid: z.number().or(z.string()),
   label: z.string(),
-  x: z.number(), // This is Longitude
-  y: z.number(), // This is Latitude
+  coordinates: z.object({
+    lat: z.number(),
+    lng: z.number(),
+  }),
+  distance_to_parcel_meters: z.number(),
+  nearest_roads: z.array(
+    z.object({
+      gid: z.number(),
+      name: z.string().nullable(),
+      fclass: z.string().nullable(),
+      ref: z.string().nullable(),
+      distance_meters: z.number(),
+    }),
+  ),
 });
 
 export const ParcelSchema = z.object({
@@ -31,7 +43,7 @@ export const RoadSchema = z.object({
   name: z.string().default("Unnamed Road"), // Fallback for roads without names
   ref: z.string().nullable().optional(),
   fclass: z.string().optional().nullable(),
-  distance: z.coerce.number().optional(),
+  distance_meters: z.coerce.number().optional(),
 });
 
 export const ParcelDetailsSchema = z.object({
@@ -88,7 +100,7 @@ export const RouteResponseSchema = z.object({
       distance: z.coerce.number().optional(),
       type: z.string().optional(),
       coordinates: CoordinateSchema.optional(),
-    })
+    }),
   ),
 });
 
