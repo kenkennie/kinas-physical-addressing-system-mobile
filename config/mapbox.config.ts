@@ -10,5 +10,5 @@ export const MAPBOX_CONFIG = {
 };
 
 export const API_CONFIG = {
-  BASE_URL: process.env.EXPO_PUBLIC_API_URL || "http://192.168.0.100:3000/api",
+  BASE_URL: process.env.EXPO_PUBLIC_API_URL || "http://10.27.105.176:3000/api",
 };

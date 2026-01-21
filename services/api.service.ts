@@ -2,9 +2,10 @@ import axios, { AxiosInstance } from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   ParcelDetailsSchema,
-  RouteRequest,
-  RouteRequestSchema,
   RouteResponseSchema,
+  TransportMode,
+  Coordinate,
+  RouteResponse,
 } from "@/types/address.types";
 import z from "zod";
 import { API_CONFIG } from "@/config/mapbox.config";
@@ -62,6 +63,7 @@ class ApiService {
       lat,
       lng,
     });
+    if (!response) throw new Error("Parcel not found");
     return ParcelDetailsSchema.parse(response.data);
   }
 
@@ -113,22 +115,30 @@ class ApiService {
       .parse(response.data);
   }
 
-  async calculateRoute(request: RouteRequest) {
-    // If no origin, backend uses user's real-time location
-    const payload = {
-      ...request,
-      origin: request.origin || "current",
-    };
-
-    return this.client.post("/route/calculate", payload);
+  async calculateRoute(params: {
+    gid: number;
+    origin: Coordinate;
+    destination_lr_no: string;
+    mode: TransportMode;
+    preferred_entry_point?: string;
+  }): Promise<RouteResponse> {
+    console.log("====================================");
+    console.log(params.preferred_entry_point);
+    console.log("====================================");
+    const response = await this.client.post("/routing/calculate", params);
+    if (!response) throw new Error("Route calculation failed");
+    return RouteResponseSchema.parse(response.data);
   }
 
-  // Get routes for all entry points at once
-  async getRouteOptions(lr_no: string, origin?: Location) {
-    return this.client.post("/route/options", {
-      lr_no,
-      origin: origin || "current",
-    });
+  async getAlternativeRoutes(params: {
+    gid: number;
+    origin: Coordinate;
+    destination_lr_no: string;
+    mode: TransportMode;
+  }): Promise<RouteResponse[]> {
+    const response = await this.client.post("/routing/alternatives", params);
+    if (!response) throw new Error("Failed to get alternatives");
+    return response.data.map((route: any) => RouteResponseSchema.parse(route));
   }
 }
 

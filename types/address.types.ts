@@ -50,6 +50,7 @@ export const ParcelDetailsSchema = z.object({
   parcel: ParcelSchema,
   entry_points: z.array(EntryPointSchema).default([]),
   nearby_roads: z.array(RoadSchema).default([]),
+  latlng: CoordinateSchema,
   administrative_block: z
     .object({
       name: z.string(),

@@ -15,8 +15,15 @@ export const MapView: React.FC = () => {
     lat: number;
     lng: number;
   } | null>(null);
-  const { selectedParcel, setSelectedParcel, setLoading, activeRoute } =
-    useMapStore();
+  const {
+    selectedParcel,
+    setSelectedParcel,
+    setLoading,
+    activeRoute,
+    alternativeRoutes,
+    selectedRouteIndex,
+    isSelectingRoute,
+  } = useMapStore();
 
   const entryPoint = activeRoute?.destination?.entry_point;
 
@@ -64,12 +71,51 @@ export const MapView: React.FC = () => {
     }
   };
 
-  // 1. Process Route Segments into a single GeoJSON for the Map
-  const routeFeatureCollection = useMemo(() => {
-    if (!activeRoute?.route?.segments) return null;
-    return {
+  // Render all alternative routes when selecting
+  const renderRoutes = () => {
+    if (!isSelectingRoute || alternativeRoutes.length === 0) {
+      return activeRoute ? renderSingleRoute(activeRoute) : null;
+    }
+
+    return alternativeRoutes.map((route, index) => {
+      const isSelected = index === selectedRouteIndex;
+      const routeGeoJSON = {
+        type: "FeatureCollection" as const,
+        features: route.route.segments.map((seg: any) => ({
+          type: "Feature" as const,
+          geometry:
+            typeof seg.geometry === "string"
+              ? JSON.parse(seg.geometry)
+              : seg.geometry,
+          properties: { name: seg.name },
+        })),
+      };
+
+      return (
+        <MapboxGL.ShapeSource
+          key={`route-${index}`}
+          id={`routeSource-${index}`}
+          shape={routeGeoJSON}
+        >
+          <MapboxGL.LineLayer
+            id={`routeLine-${index}`}
+            style={{
+              lineColor: isSelected ? "#3182ce" : "#9CA3AF",
+              lineWidth: isSelected ? 5 : 3,
+              lineCap: "round",
+              lineJoin: "round",
+              lineOpacity: isSelected ? 0.9 : 0.5,
+            }}
+          />
+        </MapboxGL.ShapeSource>
+      );
+    });
+  };
+
+  const renderSingleRoute = (route: any) => {
+    const routeGeoJSON = {
       type: "FeatureCollection" as const,
-      features: activeRoute.route.segments.map((seg: any) => ({
+      features: route.route.segments.map((seg: any) => ({
         type: "Feature" as const,
         geometry:
           typeof seg.geometry === "string"
@@ -78,7 +124,25 @@ export const MapView: React.FC = () => {
         properties: { name: seg.name },
       })),
     };
-  }, [activeRoute]);
+
+    return (
+      <MapboxGL.ShapeSource
+        id="routeSource"
+        shape={routeGeoJSON}
+      >
+        <MapboxGL.LineLayer
+          id="routeLine"
+          style={{
+            lineColor: "#3182ce",
+            lineWidth: 5,
+            lineCap: "round",
+            lineJoin: "round",
+            lineOpacity: 0.8,
+          }}
+        />
+      </MapboxGL.ShapeSource>
+    );
+  };
 
   // 2. Auto-zoom to fit the route or entry point
   // Auto-zoom to route when active
@@ -112,24 +176,8 @@ export const MapView: React.FC = () => {
         />
         <MapboxGL.UserLocation visible={true} />
 
-        {/* --- ROUTE LAYER --- */}
-        {routeFeatureCollection && (
-          <MapboxGL.ShapeSource
-            id="routeSource"
-            shape={routeFeatureCollection}
-          >
-            <MapboxGL.LineLayer
-              id="routeLine"
-              style={{
-                lineColor: "#3182ce",
-                lineWidth: 5,
-                lineCap: "round",
-                lineJoin: "round",
-                lineOpacity: 0.8,
-              }}
-            />
-          </MapboxGL.ShapeSource>
-        )}
+        {/* Render routes */}
+        {renderRoutes()}
 
         {/* --- DESTINATION MARKER --- */}
         {entryPoint && (

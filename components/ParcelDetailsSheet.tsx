@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -7,8 +7,10 @@ import {
   ScrollView,
   Dimensions,
   Platform,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import * as Location from "expo-location";
 import { useMapStore } from "../stores/map.store";
 import { apiService } from "../services/api.service";
 
@@ -19,43 +21,95 @@ export const ParcelDetailsSheet: React.FC = () => {
     selectedParcel,
     setSelectedParcel,
     userLocation,
+    setUserLocation,
     transportMode,
+    setAlternativeRoutes,
     setActiveRoute,
-    setRouteGeoJSON,
+    setIsSelectingRoute,
     setLoading,
     setError,
   } = useMapStore();
+  const [useCurrentLocation, setUseCurrentLocation] = useState(true);
 
   if (!selectedParcel) return null;
 
-  // Helper function to format the backend response for Mapbox
-  const formatRouteGeoJSON = (segments: any[]) => {
-    return {
-      type: "FeatureCollection",
-      features: segments.map((seg: any) => ({
-        type: "Feature",
-        properties: {
-          name: seg.name,
-          road_type: seg.road_type,
-        },
-        geometry: JSON.parse(seg.geometry), // Convert string from ST_AsGeoJSON to Object
-      })),
-    };
-  };
+  // const handleNavigate = async () => {
+  //   try {
+  //     setLoading(true);
+  //     const data = await apiService.calculateRoute({
+  //       origin: userLocation,
+  //       destination_lr_no: selectedParcel.parcel.lr_no,
+  //       mode: transportMode,
+  //     });
+
+  //     setActiveRoute(data);
+  //     setRouteGeoJSON(formatRouteGeoJSON(data.route.segments));
+  //   } catch (error) {
+  //     console.error(error);
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
 
   const handleNavigate = async () => {
     try {
       setLoading(true);
-      const data = await apiService.calculateRoute({
-        origin: userLocation,
-        destination_lr_no: selectedParcel.parcel.lr_no,
-        mode: transportMode,
-      });
+      setError(null);
 
-      setActiveRoute(data);
-      setRouteGeoJSON(formatRouteGeoJSON(data.route.segments));
+      let origin = userLocation;
+
+      // Get current location if user prefers
+      if (useCurrentLocation) {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") {
+          Alert.alert(
+            "Permission Required",
+            "Location permission is needed for navigation",
+          );
+          return;
+        }
+
+        const location = await Location.getCurrentPositionAsync({});
+        origin = {
+          lat: location.coords.latitude,
+          lng: location.coords.longitude,
+        };
+        setUserLocation(origin);
+      }
+
+      if (!origin) {
+        Alert.alert("Error", "Please set your starting location");
+        return;
+      }
+
+      // If parcel has multiple entry points, get alternative routes
+      if (selectedParcel.entry_points.length > 1) {
+        const alternatives = await apiService.getAlternativeRoutes({
+          gid: selectedParcel.parcel.gid,
+          origin,
+          destination_lr_no: selectedParcel.parcel.lr_no,
+          mode: transportMode,
+        });
+
+        setAlternativeRoutes(alternatives);
+        setActiveRoute(alternatives[0]); // Set first as default
+        setIsSelectingRoute(true); // Show route selection
+      } else {
+        // Single entry point - direct navigation
+        const route = await apiService.calculateRoute({
+          gid: selectedParcel.parcel.gid,
+          origin,
+          destination_lr_no: selectedParcel.parcel.lr_no,
+          mode: transportMode,
+        });
+
+        setActiveRoute(route);
+        setIsSelectingRoute(false);
+      }
     } catch (error) {
       console.error(error);
+      setError("Failed to calculate route");
+      Alert.alert("Error", "Could not calculate route. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -67,7 +121,7 @@ export const ParcelDetailsSheet: React.FC = () => {
 
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text style={styles.title}> NBO-{selectedParcel.parcel.lr_no}</Text>
+          <Text style={styles.title}>NBO-{selectedParcel.parcel.lr_no}</Text>
           <Text style={styles.subtitle}>
             {selectedParcel.administrative_block?.name}
           </Text>
@@ -85,36 +139,30 @@ export const ParcelDetailsSheet: React.FC = () => {
         style={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        {/* <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Property Details</Text>
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>LR Number</Text>
-            <Text style={styles.detailValue}>
-              {selectedParcel.parcel.lr_no}
+        {/* Location Toggle */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Starting Point</Text>
+          <TouchableOpacity
+            style={styles.locationToggle}
+            onPress={() => setUseCurrentLocation(!useCurrentLocation)}
+          >
+            <Ionicons
+              name={useCurrentLocation ? "locate" : "pin"}
+              size={20}
+              color={useCurrentLocation ? "#10B981" : "#6B7280"}
+            />
+            <Text style={styles.locationToggleText}>
+              {useCurrentLocation ? "My Current Location" : "Custom Location"}
             </Text>
-          </View>
-        </View> */}
+            <Ionicons
+              name={useCurrentLocation ? "checkmark-circle" : "ellipse-outline"}
+              size={20}
+              color={useCurrentLocation ? "#10B981" : "#D1D5DB"}
+            />
+          </TouchableOpacity>
+        </View>
 
-        {/* {selectedParcel.nearest_road && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Nearby Road</Text>
-            <View style={styles.roadCard}>
-              <View style={styles.road}>
-                <Ionicons
-                  name="navigate"
-                  size={18}
-                  color="#6B7280"
-                />
-                <View style={styles.roadInfo}>
-                  <Text style={styles.roadName}>
-                    {selectedParcel.nearest_road.name || "Unnamed Road"}
-                  </Text>
-                </View>
-              </View>
-            </View>
-          </View>
-        )} */}
-
+        {/* Admin Block */}
         {selectedParcel.administrative_block && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Administrative Area</Text>
@@ -139,63 +187,57 @@ export const ParcelDetailsSheet: React.FC = () => {
                   {selectedParcel.administrative_block.constituen}
                 </Text>
               </View>
-              {/* <View style={styles.adminRow}>
-                <Ionicons
-                  name="flag"
-                  size={16}
-                  color="#6B7280"
-                />
-                <Text style={styles.adminText}>
-                  {selectedParcel.administrative_block.county_nam}
-                </Text>
-              </View> */}
             </View>
           </View>
         )}
 
+        {/* Entry Points */}
         {selectedParcel.entry_points &&
           selectedParcel.entry_points.length > 0 && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Entry Points</Text>
-              {(() => {
-                return null;
-              })()}
-              {selectedParcel.entry_points.map((entry: any, index: number) => (
+              <Text style={styles.sectionTitle}>
+                Entry Points ({selectedParcel.entry_points.length})
+              </Text>
+              {selectedParcel.entry_points.map((entry: any) => (
                 <View
                   key={entry.gid}
                   style={styles.entryPointCard}
                 >
                   <View style={styles.entryRow}>
                     <View style={styles.badge}>
-                      <Text style={styles.badgeText}>{entry.label}</Text>
+                      <Text style={styles.badgeText}>EP {entry.label}</Text>
                     </View>
-                    <Text style={styles.coordText}>{entry.label}</Text>
-                  </View>
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Distance to Parcel</Text>
-                    <Text style={styles.detailValue}>
-                      {entry.distance_to_parcel_meters} m
+                    <Text style={styles.coordText}>
+                      {entry.distance_to_parcel_meters.toFixed(0)}m from parcel
                     </Text>
                   </View>
-                  <Text style={styles.sectionTitle}>Nearest Roads</Text>
-                  {entry.nearest_roads.map((road: any, idx: number) => (
-                    <View
-                      key={road.gid}
-                      style={styles.roadLinkRow}
-                    >
-                      <Ionicons
-                        name="navigate"
-                        size={16}
-                        color="#6B7280"
-                      />
-                      <Text style={styles.roadText}>
-                        {road.name} ({road.ref})
-                      </Text>
-                      <Text style={styles.distText}>
-                        {road.distance_meters} m
-                      </Text>
-                    </View>
-                  ))}
+
+                  {entry.nearest_roads && entry.nearest_roads.length > 0 && (
+                    <>
+                      <Text style={styles.roadsTitle}>Access Roads</Text>
+                      {entry.nearest_roads.slice(0, 2).map((road: any) => (
+                        <View
+                          key={road.gid}
+                          style={styles.roadLinkRow}
+                        >
+                          <Ionicons
+                            name="navigate"
+                            size={16}
+                            color="#6B7280"
+                          />
+                          <Text
+                            style={styles.roadText}
+                            numberOfLines={1}
+                          >
+                            {road.name || "Unnamed Road"}
+                          </Text>
+                          <Text style={styles.distText}>
+                            {road.distance_meters.toFixed(0)}m
+                          </Text>
+                        </View>
+                      ))}
+                    </>
+                  )}
                 </View>
               ))}
             </View>
@@ -212,7 +254,11 @@ export const ParcelDetailsSheet: React.FC = () => {
             size={20}
             color="#FFFFFF"
           />
-          <Text style={styles.navigateText}>Start Navigation</Text>
+          <Text style={styles.navigateText}>
+            {selectedParcel.entry_points.length > 1
+              ? "View Routes"
+              : "Start Navigation"}
+          </Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -371,6 +417,27 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "bold",
     textTransform: "uppercase",
+  },
+  locationToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F9FAFB",
+    padding: 14,
+    borderRadius: 10,
+    gap: 12,
+  },
+  locationToggleText: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "500",
+    color: "#1F2937",
+  },
+  roadsTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#6B7280",
+    marginTop: 12,
+    marginBottom: 8,
   },
   coordText: {
     color: "#6B7280",
