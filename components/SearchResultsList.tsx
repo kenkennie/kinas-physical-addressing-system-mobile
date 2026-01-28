@@ -6,6 +6,7 @@ import {
   FlatList,
   TouchableOpacity,
   Dimensions,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useMapStore } from "../stores/map.store";
@@ -30,19 +31,6 @@ export const SearchResultsList: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>
-          Search Results ({searchResults.length})
-        </Text>
-        <TouchableOpacity onPress={() => setSearchResults([])}>
-          <Ionicons
-            name="close"
-            size={24}
-            color="#6B7280"
-          />
-        </TouchableOpacity>
-      </View>
-
       <FlatList
         data={searchResults}
         keyExtractor={(item) => `result-${item.parcel.gid}`}
@@ -50,51 +38,70 @@ export const SearchResultsList: React.FC = () => {
           <TouchableOpacity
             style={styles.resultItem}
             onPress={() => handleSelectParcel(item.parcel.lr_no)}
+            activeOpacity={0.7}
           >
             <View style={styles.resultIcon}>
               <Ionicons
                 name="location"
-                size={24}
-                color="#3B82F6"
+                size={20}
+                color="#5F6368"
               />
             </View>
-            <View style={styles.resultInfo}>
-              <Text style={styles.resultTitle}>{item.parcel.lr_no}</Text>
-              <Text style={styles.resultSubtitle}>
-                {item.administrative_block?.name},{" "}
-                {item.administrative_block?.constituen}
+
+            <View style={styles.resultContent}>
+              <Text
+                style={styles.resultTitle}
+                numberOfLines={1}
+              >
+                {item.parcel.lr_no}
               </Text>
-              <View style={styles.resultMeta}>
-                <View style={styles.metaItem}>
+              <Text
+                style={styles.resultSubtitle}
+                numberOfLines={1}
+              >
+                {item.administrative_block?.name || "Nairobi"}
+                {item.administrative_block?.constituen &&
+                  `, ${item.administrative_block.constituen}`}
+              </Text>
+
+              <View style={styles.metaRow}>
+                <View style={styles.metaChip}>
                   <Ionicons
-                    name="resize"
+                    name="resize-outline"
                     size={12}
-                    color="#6B7280"
+                    color="#5F6368"
                   />
                   <Text style={styles.metaText}>
                     {item.parcel.area.toFixed(2)} Ha
                   </Text>
                 </View>
-                <View style={styles.metaItem}>
-                  <Ionicons
-                    name="enter"
-                    size={12}
-                    color="#6B7280"
-                  />
-                  <Text style={styles.metaText}>
-                    {item.entry_points.length} Entry Points
-                  </Text>
-                </View>
+
+                {item.entry_points.length > 0 && (
+                  <View style={styles.metaChip}>
+                    <Ionicons
+                      name="enter-outline"
+                      size={12}
+                      color="#5F6368"
+                    />
+                    <Text style={styles.metaText}>
+                      {item.entry_points.length} access point
+                      {item.entry_points.length > 1 ? "s" : ""}
+                    </Text>
+                  </View>
+                )}
               </View>
             </View>
+
             <Ionicons
               name="chevron-forward"
               size={20}
-              color="#9CA3AF"
+              color="#DADCE0"
             />
           </TouchableOpacity>
         )}
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
         showsVerticalScrollIndicator={false}
+        style={styles.list}
       />
     </View>
   );
@@ -103,72 +110,76 @@ export const SearchResultsList: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     position: "absolute",
-    top: 140,
-    left: 16,
-    right: 16,
+    top: Platform.OS === "ios" ? 128 : 88,
+    left: 12,
+    right: 12,
     maxHeight: height * 0.5,
     backgroundColor: "#FFFFFF",
-    borderRadius: 16,
+    borderRadius: 8,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
+    shadowOpacity: 0.18,
+    shadowRadius: 4,
     elevation: 5,
+    overflow: "hidden",
   },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
-  },
-  title: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#111827",
+  list: {
+    flex: 1,
   },
   resultItem: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    backgroundColor: "#FFFFFF",
   },
   resultIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "#EFF6FF",
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#F1F3F4",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
   },
-  resultInfo: {
+  resultContent: {
     flex: 1,
+    gap: 4,
   },
   resultTitle: {
     fontSize: 15,
-    fontWeight: "600",
-    color: "#111827",
-    marginBottom: 4,
+    fontWeight: "500",
+    color: "#202124",
+    marginBottom: 2,
+    fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
   },
   resultSubtitle: {
     fontSize: 13,
-    color: "#6B7280",
-    marginBottom: 6,
+    color: "#5F6368",
+    marginBottom: 4,
+    fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
   },
-  resultMeta: {
+  metaRow: {
     flexDirection: "row",
-    gap: 12,
+    gap: 8,
   },
-  metaItem: {
+  metaChip: {
     flexDirection: "row",
     alignItems: "center",
+    backgroundColor: "#F1F3F4",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
     gap: 4,
   },
   metaText: {
-    fontSize: 12,
-    color: "#6B7280",
+    fontSize: 11,
+    color: "#5F6368",
+    fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+  },
+  separator: {
+    height: 1,
+    backgroundColor: "#E8EAED",
+    marginLeft: 68,
   },
 });

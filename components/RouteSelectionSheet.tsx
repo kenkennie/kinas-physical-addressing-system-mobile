@@ -1,4 +1,3 @@
-// components/RouteSelectionSheet.tsx
 import React from "react";
 import {
   View,
@@ -7,6 +6,7 @@ import {
   TouchableOpacity,
   ScrollView,
   Dimensions,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useMapStore } from "../stores/map.store";
@@ -33,16 +33,29 @@ export const RouteSelectionSheet: React.FC = () => {
 
   if (alternativeRoutes.length === 0) return null;
 
+  const formatDistance = (meters: number) => {
+    if (meters < 1000) {
+      return `${Math.round(meters)} m`;
+    }
+    return `${(meters / 1000).toFixed(1)} km`;
+  };
+
   return (
     <View style={styles.container}>
-      <View style={styles.handle} />
+      <View style={styles.dragHandle} />
 
       <View style={styles.header}>
-        <Text style={styles.title}>Choose Your Route</Text>
-        <Text style={styles.subtitle}>
-          {alternativeRoutes.length} route
-          {alternativeRoutes.length > 1 ? "s" : ""} available
-        </Text>
+        <Text style={styles.title}>Choose a route</Text>
+        <TouchableOpacity
+          style={styles.closeButton}
+          onPress={() => setIsSelectingRoute(false)}
+        >
+          <Ionicons
+            name="close"
+            size={24}
+            color="#5F6368"
+          />
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -53,59 +66,46 @@ export const RouteSelectionSheet: React.FC = () => {
           const isSelected = index === selectedRouteIndex;
           const entryPoint = route.destination.entry_point;
           const accessRoad = route.destination.access_road;
+          const distance = formatDistance(route.route.total_distance);
 
           return (
             <TouchableOpacity
               key={index}
               style={[styles.routeCard, isSelected && styles.routeCardSelected]}
               onPress={() => handleSelectRoute(index)}
+              activeOpacity={0.7}
             >
+              {/* Route header with distance and time */}
               <View style={styles.routeHeader}>
-                <View style={styles.routeBadge}>
-                  <Text style={styles.routeBadgeText}>Route {index + 1}</Text>
+                <View style={styles.routeMainInfo}>
+                  <Text style={styles.routeDistance}>{distance}</Text>
+                  {isSelected && (
+                    <View style={styles.selectedBadge}>
+                      <Ionicons
+                        name="checkmark"
+                        size={14}
+                        color="#1A73E8"
+                      />
+                      <Text style={styles.selectedText}>Best route</Text>
+                    </View>
+                  )}
                 </View>
                 {isSelected && (
-                  <Ionicons
-                    name="checkmark-circle"
-                    size={24}
-                    color="#10B981"
-                  />
+                  <View style={styles.radioSelected}>
+                    <View style={styles.radioDot} />
+                  </View>
                 )}
+                {!isSelected && <View style={styles.radioUnselected} />}
               </View>
 
-              <View style={styles.routeInfo}>
-                <View style={styles.infoRow}>
-                  <Ionicons
-                    name="navigate"
-                    size={16}
-                    color="#6B7280"
-                  />
-                  <Text style={styles.infoLabel}>Distance:</Text>
-                  <Text style={styles.infoValue}>
-                    {(route.route.total_distance / 1000).toFixed(2)} km
-                  </Text>
-                </View>
-
-                <View style={styles.infoRow}>
-                  <Ionicons
-                    name="location"
-                    size={16}
-                    color="#6B7280"
-                  />
-                  <Text style={styles.infoLabel}>Entry Point:</Text>
-                  <Text style={styles.infoValue}>EP {entryPoint.label}</Text>
-                </View>
-
+              {/* Route details */}
+              <View style={styles.routeDetails}>
+                {/* Via information */}
                 {accessRoad && (
-                  <View style={styles.infoRow}>
-                    <Ionicons
-                      name="trail-sign"
-                      size={16}
-                      color="#6B7280"
-                    />
-                    <Text style={styles.infoLabel}>Via:</Text>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Via</Text>
                     <Text
-                      style={styles.infoValue}
+                      style={styles.detailValue}
                       numberOfLines={1}
                     >
                       {accessRoad.name}
@@ -113,15 +113,22 @@ export const RouteSelectionSheet: React.FC = () => {
                   </View>
                 )}
 
-                <View style={styles.infoRow}>
+                {/* Entry point */}
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Entry point</Text>
+                  <Text style={styles.detailValue}>EP {entryPoint.label}</Text>
+                </View>
+
+                {/* Walking distance from road */}
+                <View style={styles.detailRow}>
                   <Ionicons
-                    name="footsteps"
-                    size={16}
-                    color="#6B7280"
+                    name="walk"
+                    size={14}
+                    color="#5F6368"
                   />
-                  <Text style={styles.infoLabel}>From Road:</Text>
-                  <Text style={styles.infoValue}>
-                    {entryPoint.distance_to_parcel_meters.toFixed(0)}m walk
+                  <Text style={styles.detailValue}>
+                    {entryPoint.distance_to_parcel_meters.toFixed(0)}m walk from
+                    road
                   </Text>
                 </View>
               </View>
@@ -130,17 +137,14 @@ export const RouteSelectionSheet: React.FC = () => {
         })}
       </ScrollView>
 
+      {/* Footer with start button */}
       <View style={styles.footer}>
         <TouchableOpacity
-          style={styles.confirmButton}
+          style={styles.startButton}
           onPress={handleConfirm}
+          activeOpacity={0.8}
         >
-          <Text style={styles.confirmText}>Start Navigation</Text>
-          <Ionicons
-            name="arrow-forward"
-            size={20}
-            color="#FFFFFF"
-          />
+          <Text style={styles.startButtonText}>Start</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -154,56 +158,57 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: "#FFFFFF",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
     maxHeight: height * 0.65,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: -4 },
+    shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 15,
+    shadowRadius: 8,
+    elevation: 10,
   },
-  handle: {
-    width: 50,
-    height: 5,
-    backgroundColor: "#D1D5DB",
-    borderRadius: 3,
+  dragHandle: {
+    width: 36,
+    height: 4,
+    backgroundColor: "#DADCE0",
+    borderRadius: 2,
     alignSelf: "center",
-    marginTop: 10,
-    marginBottom: 5,
+    marginTop: 8,
+    marginBottom: 12,
   },
   header: {
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#E5E7EB",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingBottom: 16,
   },
   title: {
-    fontSize: 22,
-    fontWeight: "bold",
-    color: "#1F2937",
-    marginBottom: 4,
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#202124",
+    fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
   },
-  subtitle: {
-    fontSize: 14,
-    color: "#6B7280",
+  closeButton: {
+    padding: 8,
+    marginRight: -8,
   },
   content: {
     flex: 1,
-    paddingHorizontal: 24,
-    paddingVertical: 16,
+    paddingHorizontal: 20,
   },
   routeCard: {
-    backgroundColor: "#F9FAFB",
-    borderRadius: 12,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#E8EAED",
     padding: 16,
     marginBottom: 12,
-    borderWidth: 2,
-    borderColor: "#E5E7EB",
   },
   routeCardSelected: {
-    borderColor: "#10B981",
-    backgroundColor: "#ECFDF5",
+    borderColor: "#1A73E8",
+    borderWidth: 2,
+    backgroundColor: "#F8FBFF",
   },
   routeHeader: {
     flexDirection: "row",
@@ -211,54 +216,89 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 12,
   },
-  routeBadge: {
-    backgroundColor: "#3B82F6",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
+  routeMainInfo: {
+    flex: 1,
+    gap: 4,
   },
-  routeBadgeText: {
-    color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "bold",
+  routeDistance: {
+    fontSize: 18,
+    fontWeight: "500",
+    color: "#202124",
+    fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
   },
-  routeInfo: {
-    gap: 8,
-  },
-  infoRow: {
+  selectedBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 4,
   },
-  infoLabel: {
-    fontSize: 14,
-    color: "#6B7280",
+  selectedText: {
+    fontSize: 12,
+    color: "#1A73E8",
     fontWeight: "500",
+    fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
   },
-  infoValue: {
-    fontSize: 14,
-    color: "#1F2937",
-    fontWeight: "600",
-    flex: 1,
-  },
-  footer: {
-    paddingHorizontal: 24,
-    paddingVertical: 20,
-    borderTopWidth: 1,
-    borderTopColor: "#E5E7EB",
-  },
-  confirmButton: {
-    flexDirection: "row",
-    backgroundColor: "#2563EB",
-    paddingVertical: 18,
-    borderRadius: 14,
+  radioSelected: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: "#1A73E8",
     justifyContent: "center",
     alignItems: "center",
-    gap: 10,
   },
-  confirmText: {
+  radioDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#1A73E8",
+  },
+  radioUnselected: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: "#DADCE0",
+  },
+  routeDetails: {
+    gap: 8,
+  },
+  detailRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  detailLabel: {
+    fontSize: 13,
+    color: "#5F6368",
+    fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+  },
+  detailValue: {
+    fontSize: 13,
+    color: "#202124",
+    flex: 1,
+    fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+  },
+  footer: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#E8EAED",
+  },
+  startButton: {
+    backgroundColor: "#1A73E8",
+    borderRadius: 24,
+    paddingVertical: 14,
+    alignItems: "center",
+    shadowColor: "#1A73E8",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  startButtonText: {
     color: "#FFFFFF",
-    fontSize: 17,
-    fontWeight: "600",
+    fontSize: 16,
+    fontWeight: "500",
+    fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
   },
 });

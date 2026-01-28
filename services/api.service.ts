@@ -63,6 +63,7 @@ class ApiService {
       lat,
       lng,
     });
+
     if (!response) throw new Error("Parcel not found");
     return ParcelDetailsSchema.parse(response.data);
   }
@@ -122,9 +123,6 @@ class ApiService {
     mode: TransportMode;
     preferred_entry_point?: string;
   }): Promise<RouteResponse> {
-    console.log("====================================");
-    console.log(params.preferred_entry_point);
-    console.log("====================================");
     const response = await this.client.post("/routing/calculate", params);
     if (!response) throw new Error("Route calculation failed");
     return RouteResponseSchema.parse(response.data);

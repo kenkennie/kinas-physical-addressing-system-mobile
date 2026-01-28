@@ -28,61 +28,43 @@ export const ParcelDetailsSheet: React.FC = () => {
     setIsSelectingRoute,
     setLoading,
     setError,
+    activeRoute,
   } = useMapStore();
-  const [useCurrentLocation, setUseCurrentLocation] = useState(true);
 
-  if (!selectedParcel) return null;
+  // Don't show if there's an active route - show direction sheet instead
+  if (!selectedParcel || activeRoute) return null;
 
-  // const handleNavigate = async () => {
-  //   try {
-  //     setLoading(true);
-  //     const data = await apiService.calculateRoute({
-  //       origin: userLocation,
-  //       destination_lr_no: selectedParcel.parcel.lr_no,
-  //       mode: transportMode,
-  //     });
-
-  //     setActiveRoute(data);
-  //     setRouteGeoJSON(formatRouteGeoJSON(data.route.segments));
-  //   } catch (error) {
-  //     console.error(error);
-  //   } finally {
-  //     setLoading(false);
-  //   }
-  // };
-
-  const handleNavigate = async () => {
+  const handleDirections = async () => {
     try {
       setLoading(true);
       setError(null);
 
       let origin = userLocation;
 
-      // Get current location if user prefers
-      if (useCurrentLocation) {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== "granted") {
-          Alert.alert(
-            "Permission Required",
-            "Location permission is needed for navigation",
-          );
-          return;
-        }
-
-        const location = await Location.getCurrentPositionAsync({});
-        origin = {
-          lat: location.coords.latitude,
-          lng: location.coords.longitude,
-        };
-        setUserLocation(origin);
+      // Get current location
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(
+          "Location Access",
+          "Please enable location access for navigation",
+        );
+        return;
       }
+
+      const location = await Location.getCurrentPositionAsync({});
+      origin = {
+        lat: location.coords.latitude,
+        lng: location.coords.longitude,
+      };
+
+      setUserLocation(origin);
 
       if (!origin) {
         Alert.alert("Error", "Please set your starting location");
         return;
       }
 
-      // If parcel has multiple entry points, get alternative routes
+      // Check for multiple entry points
       if (selectedParcel.entry_points.length > 1) {
         const alternatives = await apiService.getAlternativeRoutes({
           gid: selectedParcel.parcel.gid,
@@ -92,10 +74,9 @@ export const ParcelDetailsSheet: React.FC = () => {
         });
 
         setAlternativeRoutes(alternatives);
-        setActiveRoute(alternatives[0]); // Set first as default
-        setIsSelectingRoute(true); // Show route selection
+        setActiveRoute(alternatives[0]);
+        setIsSelectingRoute(true);
       } else {
-        // Single entry point - direct navigation
         const route = await apiService.calculateRoute({
           gid: selectedParcel.parcel.gid,
           origin,
@@ -106,6 +87,8 @@ export const ParcelDetailsSheet: React.FC = () => {
         setActiveRoute(route);
         setIsSelectingRoute(false);
       }
+
+      // Keep parcel selected - don't clear it
     } catch (error) {
       console.error(error);
       setError("Failed to calculate route");
@@ -115,152 +98,221 @@ export const ParcelDetailsSheet: React.FC = () => {
     }
   };
 
+  const handleShare = async () => {
+    // TODO: Implement share functionality
+    Alert.alert("Share", "Share functionality coming soon");
+  };
+
+  const handleSave = async () => {
+    // TODO: Implement save functionality
+    Alert.alert("Save", "Save functionality coming soon");
+  };
+
   return (
     <View style={styles.container}>
-      <View style={styles.handle} />
+      {/* Google Maps style drag handle */}
+      <View style={styles.dragHandle} />
 
+      {/* Header section */}
       <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.title}>NBO-{selectedParcel.parcel.lr_no}</Text>
+        <View style={styles.headerContent}>
+          <Text style={styles.title}>{selectedParcel.parcel.lr_no}</Text>
           <Text style={styles.subtitle}>
-            {selectedParcel.administrative_block?.name}
+            {selectedParcel.administrative_block?.name || "Nairobi"}
           </Text>
         </View>
-        <TouchableOpacity onPress={() => setSelectedParcel(null)}>
+        <TouchableOpacity
+          style={styles.closeButton}
+          onPress={() => setSelectedParcel(null)}
+        >
           <Ionicons
             name="close"
             size={24}
-            color="#6B7280"
+            color="#5F6368"
           />
         </TouchableOpacity>
       </View>
+
+      {/* Action buttons row */}
+      <View style={styles.actionsRow}>
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={handleDirections}
+        >
+          <View style={[styles.actionIconContainer, styles.directionsIcon]}>
+            <Ionicons
+              name="navigate"
+              size={20}
+              color="#FFFFFF"
+            />
+          </View>
+          <Text style={styles.actionLabel}>Directions</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={handleSave}
+        >
+          <View style={styles.actionIconContainer}>
+            <Ionicons
+              name="bookmark-outline"
+              size={20}
+              color="#5F6368"
+            />
+          </View>
+          <Text style={styles.actionLabel}>Save</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={handleShare}
+        >
+          <View style={styles.actionIconContainer}>
+            <Ionicons
+              name="share-outline"
+              size={20}
+              color="#5F6368"
+            />
+          </View>
+          <Text style={styles.actionLabel}>Share</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.divider} />
 
       <ScrollView
         style={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        {/* Location Toggle */}
+        {/* Parcel Information */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Starting Point</Text>
-          <TouchableOpacity
-            style={styles.locationToggle}
-            onPress={() => setUseCurrentLocation(!useCurrentLocation)}
-          >
+          <View style={styles.infoRow}>
             <Ionicons
-              name={useCurrentLocation ? "locate" : "pin"}
-              size={20}
-              color={useCurrentLocation ? "#10B981" : "#6B7280"}
+              name="document-text-outline"
+              size={18}
+              color="#5F6368"
             />
-            <Text style={styles.locationToggleText}>
-              {useCurrentLocation ? "My Current Location" : "Custom Location"}
+            <Text style={styles.infoLabel}>LR Number</Text>
+            <Text style={styles.infoValue}>
+              NBO-{selectedParcel.parcel.lr_no}
             </Text>
-            <Ionicons
-              name={useCurrentLocation ? "checkmark-circle" : "ellipse-outline"}
-              size={20}
-              color={useCurrentLocation ? "#10B981" : "#D1D5DB"}
-            />
-          </TouchableOpacity>
-        </View>
+          </View>
 
-        {/* Admin Block */}
-        {selectedParcel.administrative_block && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Administrative Area</Text>
-            <View style={styles.adminCard}>
-              <View style={styles.adminRow}>
+          {selectedParcel.parcel.fr_no && (
+            <View style={styles.infoRow}>
+              <Ionicons
+                name="document-outline"
+                size={18}
+                color="#5F6368"
+              />
+              <Text style={styles.infoLabel}>FR Number</Text>
+              <Text style={styles.infoValue}>
+                {selectedParcel.parcel.fr_no}
+              </Text>
+            </View>
+          )}
+
+          <View style={styles.infoRow}>
+            <Ionicons
+              name="resize-outline"
+              size={18}
+              color="#5F6368"
+            />
+            <Text style={styles.infoLabel}>Area</Text>
+            <Text style={styles.infoValue}>
+              {selectedParcel.parcel.area} Ha
+            </Text>
+          </View>
+
+          {selectedParcel.administrative_block && (
+            <>
+              <View style={styles.infoRow}>
                 <Ionicons
-                  name="location"
-                  size={16}
-                  color="#6B7280"
+                  name="location-outline"
+                  size={18}
+                  color="#5F6368"
                 />
-                <Text style={styles.adminText}>
+                <Text style={styles.infoLabel}>Location</Text>
+                <Text style={styles.infoValue}>
                   {selectedParcel.administrative_block.name}
                 </Text>
               </View>
-              <View style={styles.adminRow}>
-                <Ionicons
-                  name="business"
-                  size={16}
-                  color="#6B7280"
-                />
-                <Text style={styles.adminText}>
-                  {selectedParcel.administrative_block.constituen}
-                </Text>
-              </View>
-            </View>
-          </View>
-        )}
+
+              {selectedParcel.administrative_block.constituen && (
+                <View style={styles.infoRow}>
+                  <Ionicons
+                    name="business-outline"
+                    size={18}
+                    color="#5F6368"
+                  />
+                  <Text style={styles.infoLabel}>Constituency</Text>
+                  <Text style={styles.infoValue}>
+                    {selectedParcel.administrative_block.constituen}
+                  </Text>
+                </View>
+              )}
+            </>
+          )}
+        </View>
 
         {/* Entry Points */}
         {selectedParcel.entry_points &&
           selectedParcel.entry_points.length > 0 && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>
-                Entry Points ({selectedParcel.entry_points.length})
-              </Text>
-              {selectedParcel.entry_points.map((entry: any) => (
-                <View
-                  key={entry.gid}
-                  style={styles.entryPointCard}
-                >
-                  <View style={styles.entryRow}>
-                    <View style={styles.badge}>
-                      <Text style={styles.badgeText}>EP {entry.label}</Text>
-                    </View>
-                    <Text style={styles.coordText}>
-                      {entry.distance_to_parcel_meters.toFixed(0)}m from parcel
-                    </Text>
-                  </View>
+            <>
+              <View style={styles.divider} />
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>
+                  Access Points ({selectedParcel.entry_points.length})
+                </Text>
 
-                  {entry.nearest_roads && entry.nearest_roads.length > 0 && (
-                    <>
-                      <Text style={styles.roadsTitle}>Access Roads</Text>
-                      {entry.nearest_roads.slice(0, 2).map((road: any) => (
-                        <View
-                          key={road.gid}
-                          style={styles.roadLinkRow}
-                        >
-                          <Ionicons
-                            name="navigate"
-                            size={16}
-                            color="#6B7280"
-                          />
-                          <Text
-                            style={styles.roadText}
-                            numberOfLines={1}
+                {selectedParcel.entry_points.map((entry: any) => (
+                  <View
+                    key={entry.gid}
+                    style={styles.entryCard}
+                  >
+                    <View style={styles.entryHeader}>
+                      <View style={styles.entryBadge}>
+                        <Text style={styles.entryBadgeText}>
+                          EP {entry.label}
+                        </Text>
+                      </View>
+                      <Text style={styles.entryDistance}>
+                        {entry.distance_to_parcel_meters}m from parcel
+                      </Text>
+                    </View>
+
+                    {entry.nearest_roads && entry.nearest_roads.length > 0 && (
+                      <View style={styles.roadsContainer}>
+                        <Text style={styles.roadsLabel}>Nearby Roads</Text>
+                        {entry.nearest_roads.slice(0, 2).map((road: any) => (
+                          <View
+                            key={road.gid}
+                            style={styles.roadRow}
                           >
-                            {road.name || "Unnamed Road"}
-                          </Text>
-                          <Text style={styles.distText}>
-                            {road.distance_meters.toFixed(0)}m
-                          </Text>
-                        </View>
-                      ))}
-                    </>
-                  )}
-                </View>
-              ))}
-            </View>
+                            <Ionicons
+                              name="navigate-outline"
+                              size={14}
+                              color="#5F6368"
+                            />
+                            <Text
+                              style={styles.roadName}
+                              numberOfLines={1}
+                            >
+                              {road.name || "Unnamed Road"}
+                            </Text>
+                            <Text style={styles.roadDistance}>
+                              {road.distance_meters}m
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                ))}
+              </View>
+            </>
           )}
       </ScrollView>
-
-      <View style={styles.footer}>
-        <TouchableOpacity
-          style={styles.navigateButton}
-          onPress={handleNavigate}
-        >
-          <Ionicons
-            name="navigate"
-            size={20}
-            color="#FFFFFF"
-          />
-          <Text style={styles.navigateText}>
-            {selectedParcel.entry_points.length > 1
-              ? "View Routes"
-              : "Start Navigation"}
-          </Text>
-        </TouchableOpacity>
-      </View>
     </View>
   );
 };
@@ -272,271 +324,167 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: "#FFFFFF",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
     maxHeight: height * 0.75,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: -4 },
+    shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 15,
+    shadowRadius: 8,
+    elevation: 10,
   },
-  handle: {
-    width: 50,
-    height: 5,
-    backgroundColor: "#D1D5DB",
-    borderRadius: 3,
+  dragHandle: {
+    width: 36,
+    height: 4,
+    backgroundColor: "#DADCE0",
+    borderRadius: 2,
     alignSelf: "center",
-    marginTop: 10,
-    marginBottom: 5,
+    marginTop: 8,
+    marginBottom: 12,
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#E5E7EB",
+    alignItems: "flex-start",
+    paddingHorizontal: 20,
+    paddingBottom: 16,
   },
-  headerLeft: {
+  headerContent: {
     flex: 1,
   },
   title: {
     fontSize: 22,
-    fontWeight: "bold",
-    color: "#1F2937",
-    marginBottom: 2,
+    fontWeight: "500",
+    color: "#202124",
+    marginBottom: 4,
+    fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
   },
   subtitle: {
-    fontSize: 15,
-    color: "#6B7280",
-    fontWeight: "500",
+    fontSize: 14,
+    color: "#5F6368",
+    fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+  },
+  closeButton: {
+    padding: 8,
+    marginTop: -8,
+    marginRight: -8,
+  },
+  actionsRow: {
+    flexDirection: "row",
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    gap: 24,
+  },
+  actionButton: {
+    alignItems: "center",
+    gap: 6,
+  },
+  actionIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#F1F3F4",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  directionsIcon: {
+    backgroundColor: "#1A73E8",
+  },
+  actionLabel: {
+    fontSize: 12,
+    color: "#202124",
+    fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+  },
+  divider: {
+    height: 1,
+    backgroundColor: "#E8EAED",
+    marginHorizontal: 20,
   },
   content: {
     flex: 1,
-    paddingHorizontal: 24,
-    paddingVertical: 16,
   },
   section: {
-    marginBottom: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#1F2937",
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#202124",
     marginBottom: 12,
+    fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
   },
-  detailRow: {
+  infoRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
     paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
-  },
-  detailLabel: {
-    fontSize: 15,
-    color: "#6B7280",
-    fontWeight: "500",
-  },
-  detailValue: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#1F2937",
-  },
-  entryPoint: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#F9FAFB",
-    padding: 14,
-    borderRadius: 10,
-    marginBottom: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  entryPointIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "#10B981",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 14,
-  },
-  entryPointNumber: {
-    color: "#FFFFFF",
-    fontWeight: "bold",
-    fontSize: 17,
-  },
-  entryPointInfo: {
-    flex: 1,
-  },
-  entryPointTitle: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#1F2937",
-    marginBottom: 3,
-  },
-  entryPointCoords: {
-    fontSize: 13,
-    color: "#6B7280",
-  },
-  entryPointCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    marginBottom: 14,
-    padding: 14,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  entryRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  badge: {
-    backgroundColor: "#3B82F6",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  badgeText: {
-    color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "bold",
-    textTransform: "uppercase",
-  },
-  locationToggle: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#F9FAFB",
-    padding: 14,
-    borderRadius: 10,
     gap: 12,
   },
-  locationToggleText: {
+  infoLabel: {
+    fontSize: 14,
+    color: "#5F6368",
     flex: 1,
-    fontSize: 15,
-    fontWeight: "500",
-    color: "#1F2937",
+    fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
   },
-  roadsTitle: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#6B7280",
-    marginTop: 12,
+  infoValue: {
+    fontSize: 14,
+    color: "#202124",
+    fontWeight: "500",
+    fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+  },
+  entryCard: {
+    backgroundColor: "#F8F9FA",
+    borderRadius: 8,
+    padding: 12,
     marginBottom: 8,
   },
-  coordText: {
-    color: "#6B7280",
-    fontSize: 13,
-    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+  entryHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
   },
-  roadLinkRow: {
+  entryBadge: {
+    backgroundColor: "#1A73E8",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  entryBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "500",
+    fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+  },
+  entryDistance: {
+    fontSize: 12,
+    color: "#5F6368",
+    fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+  },
+  roadsContainer: {
+    gap: 8,
+  },
+  roadsLabel: {
+    fontSize: 12,
+    color: "#5F6368",
+    marginBottom: 4,
+    fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+  },
+  roadRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#F3F4F6",
-    padding: 10,
-    borderRadius: 8,
-  },
-  roadText: {
-    fontSize: 14,
-    color: "#374151",
-    marginLeft: 10,
-    flex: 1,
-  },
-  distText: {
-    fontSize: 13,
-    color: "#9CA3AF",
-    marginLeft: 6,
-  },
-  road: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 10,
-  },
-  roadInfo: {
-    marginLeft: 14,
-    flex: 1,
+    gap: 8,
+    paddingVertical: 4,
   },
   roadName: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#1F2937",
+    flex: 1,
+    fontSize: 13,
+    color: "#202124",
+    fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
   },
   roadDistance: {
-    fontSize: 13,
-    color: "#6B7280",
-    marginTop: 3,
-  },
-  roadCard: {
-    backgroundColor: "#F9FAFB",
-    padding: 16,
-    borderRadius: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  adminCard: {
-    backgroundColor: "#F9FAFB",
-    padding: 16,
-    borderRadius: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  adminRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 8,
-  },
-  adminText: {
-    fontSize: 15,
-    color: "#1F2937",
-    marginLeft: 10,
-    fontWeight: "500",
-  },
-  footer: {
-    paddingHorizontal: 24,
-    paddingVertical: 20,
-    borderTopWidth: 1,
-    borderTopColor: "#E5E7EB",
-    backgroundColor: "#FFFFFF",
-  },
-  navigateButton: {
-    flexDirection: "row",
-    backgroundColor: "#2563EB",
-    paddingVertical: 18,
-    paddingHorizontal: 28,
-    borderRadius: 14,
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#2563EB",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 6,
-  },
-  navigateText: {
-    color: "#FFFFFF",
-    fontSize: 17,
-    fontWeight: "600",
-    marginLeft: 10,
+    fontSize: 12,
+    color: "#5F6368",
+    fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
   },
 });
