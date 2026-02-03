@@ -13,6 +13,19 @@ export const MapView: React.FC = () => {
   const cameraRef = useRef<MapboxGL.Camera>(null);
   const [initialLocationSet, setInitialLocationSet] = useState(false);
 
+  // Kenya bounds - prevents panning outside Kenya
+  const KENYA_BOUNDS = {
+    ne: [46.899578, 6.019978], // Northeast corner
+    sw: [33.908859, -4.678047], // Southwest corner
+  };
+
+  // Zoom level constraints
+  const ZOOM_CONSTRAINTS = {
+    MIN_ZOOM: 6, // Shows all of Kenya
+    MAX_ZOOM: 20, // Prevents over-zooming
+    PARCEL_LABELS_MIN_ZOOM: 15, // Only show labels when zoomed in enough
+  };
+
   const [clickedLocation, setClickedLocation] = useState<{
     lat: number;
     lng: number;
@@ -80,11 +93,11 @@ export const MapView: React.FC = () => {
       const data = await apiService.getParcelByGid(lat, lng);
       setSelectedParcel(data);
 
-      // Zoom to parcel
+      // Zoom to parcel - respecting max zoom
       if (data.centroid) {
         cameraRef.current?.setCamera({
           centerCoordinate: [data.centroid.lng, data.centroid.lat],
-          zoomLevel: 17,
+          zoomLevel: Math.min(18, ZOOM_CONSTRAINTS.MAX_ZOOM), // Cap at 18 for parcel view
           animationDuration: 800,
         });
       }
@@ -223,7 +236,10 @@ export const MapView: React.FC = () => {
             MAPBOX_CONFIG.NAIROBI_CENTER.longitude,
             MAPBOX_CONFIG.NAIROBI_CENTER.latitude,
           ]}
-          animationMode="flyTo"
+          minZoomLevel={ZOOM_CONSTRAINTS.MIN_ZOOM}
+          maxZoomLevel={ZOOM_CONSTRAINTS.MAX_ZOOM}
+          maxBounds={KENYA_BOUNDS}
+          animationMode="easeTo"
           animationDuration={1000}
         />
 
@@ -270,7 +286,7 @@ export const MapView: React.FC = () => {
             minZoomLevel={12}
             style={{
               fillColor: "#E8F5E9",
-              fillOpacity: 0.4,
+              fillOpacity: 0.7,
             }}
           />
 
@@ -306,11 +322,16 @@ export const MapView: React.FC = () => {
             sourceLayerID="parcels"
             minZoomLevel={14}
             style={{
-              textField: ["get", "lr_no"],
+              // Updated to use the new pre-formatted label from SQL
+              textField: ["get", "display_label"],
+
               textSize: 11,
               textColor: "#202124",
               textHaloColor: "#FFFFFF",
               textHaloWidth: 1.5,
+
+              // Optional: Only show label if data exists (prevents "null" text)
+              textOpacity: ["case", ["has", "display_label"], 1, 0],
             }}
           />
         </MapboxGL.VectorSource>

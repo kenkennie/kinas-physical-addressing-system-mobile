@@ -8,11 +8,13 @@ import {
   Dimensions,
   Platform,
   Alert,
+  Animated,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import { useMapStore } from "../stores/map.store";
 import { apiService } from "../services/api.service";
+import { Share } from "react-native";
 
 const { height } = Dimensions.get("window");
 
@@ -30,6 +32,7 @@ export const ParcelDetailsSheet: React.FC = () => {
     setError,
     activeRoute,
   } = useMapStore();
+  const [sheetCollapsed, setSheetCollapsed] = useState(false);
 
   // Don't show if there's an active route - show direction sheet instead
   if (!selectedParcel || activeRoute) return null;
@@ -98,9 +101,15 @@ export const ParcelDetailsSheet: React.FC = () => {
     }
   };
 
+  // Share function
   const handleShare = async () => {
-    // TODO: Implement share functionality
-    Alert.alert("Share", "Share functionality coming soon");
+    try {
+      await Share.share({
+        message: `Parcel: ${selectedParcel.administrative_block?.short_name || "N/A"}/${selectedParcel.parcel.lr_no.split("/")[1] || selectedParcel.parcel.lr_no}\nArea: ${selectedParcel.parcel.area} hectares`,
+      });
+    } catch (error) {
+      console.error(error);
+    }
   };
 
   const handleSave = async () => {
@@ -109,211 +118,165 @@ export const ParcelDetailsSheet: React.FC = () => {
   };
 
   return (
-    <View style={styles.container}>
-      {/* Google Maps style drag handle */}
-      <View style={styles.dragHandle} />
+    <Animated.View
+      style={[styles.container, sheetCollapsed && styles.containerCollapsed]}
+    >
+      <TouchableOpacity onPress={() => setSheetCollapsed(!sheetCollapsed)}>
+        <View style={styles.dragHandle} />
+      </TouchableOpacity>
 
       {/* Header section */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
-          <Text style={styles.title}>{selectedParcel.parcel.lr_no}</Text>
-          <Text style={styles.subtitle}>
-            {selectedParcel.administrative_block?.name || "Nairobi"}
+          <Text style={styles.title}>
+            {selectedParcel.administrative_block?.short_name || "N/A"}/
+            {selectedParcel.parcel.lr_no.split("/")[1] ||
+              selectedParcel.parcel.lr_no}
           </Text>
         </View>
-        <TouchableOpacity
-          style={styles.closeButton}
-          onPress={() => setSelectedParcel(null)}
-        >
-          <Ionicons
-            name="close"
-            size={24}
-            color="#5F6368"
-          />
-        </TouchableOpacity>
-      </View>
-
-      {/* Action buttons row */}
-      <View style={styles.actionsRow}>
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={handleDirections}
-        >
-          <View style={[styles.actionIconContainer, styles.directionsIcon]}>
-            <Ionicons
-              name="navigate"
-              size={20}
-              color="#FFFFFF"
-            />
-          </View>
-          <Text style={styles.actionLabel}>Directions</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={handleSave}
-        >
-          <View style={styles.actionIconContainer}>
-            <Ionicons
-              name="bookmark-outline"
-              size={20}
-              color="#5F6368"
-            />
-          </View>
-          <Text style={styles.actionLabel}>Save</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={handleShare}
-        >
-          <View style={styles.actionIconContainer}>
+        <View style={styles.headerButtons}>
+          <TouchableOpacity
+            style={styles.iconButton}
+            onPress={handleShare}
+          >
             <Ionicons
               name="share-outline"
-              size={20}
+              size={24}
               color="#5F6368"
             />
-          </View>
-          <Text style={styles.actionLabel}>Share</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.divider} />
-
-      <ScrollView
-        style={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Parcel Information */}
-        <View style={styles.section}>
-          <View style={styles.infoRow}>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.iconButton}
+            onPress={() => setSheetCollapsed(true)}
+          >
             <Ionicons
-              name="document-text-outline"
-              size={18}
+              name="close"
+              size={24}
               color="#5F6368"
             />
-            <Text style={styles.infoLabel}>LR Number</Text>
-            <Text style={styles.infoValue}>
-              NBO-{selectedParcel.parcel.lr_no}
-            </Text>
-          </View>
-
-          {selectedParcel.parcel.fr_no && (
-            <View style={styles.infoRow}>
-              <Ionicons
-                name="document-outline"
-                size={18}
-                color="#5F6368"
-              />
-              <Text style={styles.infoLabel}>FR Number</Text>
-              <Text style={styles.infoValue}>
-                {selectedParcel.parcel.fr_no}
-              </Text>
-            </View>
-          )}
-
-          <View style={styles.infoRow}>
-            <Ionicons
-              name="resize-outline"
-              size={18}
-              color="#5F6368"
-            />
-            <Text style={styles.infoLabel}>Area</Text>
-            <Text style={styles.infoValue}>
-              {selectedParcel.parcel.area} Ha
-            </Text>
-          </View>
-
-          {selectedParcel.administrative_block && (
-            <>
-              <View style={styles.infoRow}>
-                <Ionicons
-                  name="location-outline"
-                  size={18}
-                  color="#5F6368"
-                />
-                <Text style={styles.infoLabel}>Location</Text>
-                <Text style={styles.infoValue}>
-                  {selectedParcel.administrative_block.name}
-                </Text>
-              </View>
-
-              {selectedParcel.administrative_block.constituen && (
-                <View style={styles.infoRow}>
-                  <Ionicons
-                    name="business-outline"
-                    size={18}
-                    color="#5F6368"
-                  />
-                  <Text style={styles.infoLabel}>Constituency</Text>
-                  <Text style={styles.infoValue}>
-                    {selectedParcel.administrative_block.constituen}
-                  </Text>
-                </View>
-              )}
-            </>
-          )}
+          </TouchableOpacity>
         </View>
+      </View>
+      {!sheetCollapsed && (
+        <>
+          <View style={styles.divider} />
 
-        {/* Entry Points */}
-        {selectedParcel.entry_points &&
-          selectedParcel.entry_points.length > 0 && (
-            <>
-              <View style={styles.divider} />
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>
-                  Access Points ({selectedParcel.entry_points.length})
-                </Text>
+          <ScrollView
+            style={styles.content}
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Parcel Information */}
+            <View style={styles.section}>
+              {selectedParcel.administrative_block && (
+                <>
+                  <View style={styles.infoRow}>
+                    <Ionicons
+                      name="location-outline"
+                      size={18}
+                      color="#5F6368"
+                    />
+                    <Text style={styles.infoLabel}>Location</Text>
+                    <Text style={styles.infoValue}>
+                      {selectedParcel.administrative_block.name}
+                    </Text>
+                  </View>
 
-                {selectedParcel.entry_points.map((entry: any) => (
-                  <View
-                    key={entry.gid}
-                    style={styles.entryCard}
-                  >
-                    <View style={styles.entryHeader}>
-                      <View style={styles.entryBadge}>
-                        <Text style={styles.entryBadgeText}>
-                          EP {entry.label}
-                        </Text>
-                      </View>
-                      <Text style={styles.entryDistance}>
-                        {entry.distance_to_parcel_meters}m from parcel
+                  {selectedParcel.administrative_block.constituen && (
+                    <View style={styles.infoRow}>
+                      <Ionicons
+                        name="business-outline"
+                        size={18}
+                        color="#5F6368"
+                      />
+                      <Text style={styles.infoLabel}>Constituency</Text>
+                      <Text style={styles.infoValue}>
+                        {selectedParcel.administrative_block.constituen}
                       </Text>
                     </View>
+                  )}
+                </>
+              )}
+            </View>
 
-                    {entry.nearest_roads && entry.nearest_roads.length > 0 && (
-                      <View style={styles.roadsContainer}>
-                        <Text style={styles.roadsLabel}>Nearby Roads</Text>
-                        {entry.nearest_roads.slice(0, 2).map((road: any) => (
-                          <View
-                            key={road.gid}
-                            style={styles.roadRow}
-                          >
-                            <Ionicons
-                              name="navigate-outline"
-                              size={14}
-                              color="#5F6368"
-                            />
-                            <Text
-                              style={styles.roadName}
-                              numberOfLines={1}
-                            >
-                              {road.name || "Unnamed Road"}
-                            </Text>
-                            <Text style={styles.roadDistance}>
-                              {road.distance_meters}m
+            {/* Entry Points */}
+            {selectedParcel.entry_points &&
+              selectedParcel.entry_points.length > 0 && (
+                <>
+                  <View style={styles.divider} />
+                  <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>
+                      Access Points ({selectedParcel.entry_points.length})
+                    </Text>
+
+                    {selectedParcel.entry_points.map((entry: any) => (
+                      <View
+                        key={entry.gid}
+                        style={styles.entryCard}
+                      >
+                        <View style={styles.entryHeader}>
+                          <View style={styles.entryBadge}>
+                            <Text style={styles.entryBadgeText}>
+                              EP {entry.label}
                             </Text>
                           </View>
-                        ))}
+                          <Text style={styles.entryDistance}>
+                            {entry.distance_to_parcel_meters}m from parcel
+                          </Text>
+                        </View>
+
+                        {entry.nearest_roads &&
+                          entry.nearest_roads.length > 0 && (
+                            <View style={styles.roadsContainer}>
+                              <Text style={styles.roadsLabel}>
+                                Nearby Roads
+                              </Text>
+                              {entry.nearest_roads
+                                .slice(0, 2)
+                                .map((road: any) => (
+                                  <View
+                                    key={road.gid}
+                                    style={styles.roadRow}
+                                  >
+                                    <Ionicons
+                                      name="navigate-outline"
+                                      size={14}
+                                      color="#5F6368"
+                                    />
+                                    <Text
+                                      style={styles.roadName}
+                                      numberOfLines={1}
+                                    >
+                                      {road.name || "Unnamed Road"}
+                                    </Text>
+                                    <Text style={styles.roadDistance}>
+                                      {road.distance_meters}m
+                                    </Text>
+                                  </View>
+                                ))}
+                            </View>
+                          )}
                       </View>
-                    )}
+                    ))}
                   </View>
-                ))}
-              </View>
-            </>
-          )}
-      </ScrollView>
-    </View>
+                </>
+              )}
+            <View style={styles.bottomActions}>
+              <TouchableOpacity
+                style={styles.directionsButton}
+                onPress={handleDirections}
+              >
+                <Ionicons
+                  name="navigate"
+                  size={20}
+                  color="#FFFFFF"
+                />
+                <Text style={styles.directionsButtonText}>Get Directions</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </>
+      )}
+    </Animated.View>
   );
 };
 
@@ -332,6 +295,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 8,
     elevation: 10,
+  },
+  containerCollapsed: {
+    maxHeight: 80, // Just show header when collapsed
   },
   dragHandle: {
     width: 36,
@@ -352,6 +318,14 @@ const styles = StyleSheet.create({
   headerContent: {
     flex: 1,
   },
+  headerButtons: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  iconButton: {
+    padding: 8,
+    marginTop: -8,
+  },
   title: {
     fontSize: 22,
     fontWeight: "500",
@@ -364,37 +338,6 @@ const styles = StyleSheet.create({
     color: "#5F6368",
     fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
   },
-  closeButton: {
-    padding: 8,
-    marginTop: -8,
-    marginRight: -8,
-  },
-  actionsRow: {
-    flexDirection: "row",
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-    gap: 24,
-  },
-  actionButton: {
-    alignItems: "center",
-    gap: 6,
-  },
-  actionIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "#F1F3F4",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  directionsIcon: {
-    backgroundColor: "#1A73E8",
-  },
-  actionLabel: {
-    fontSize: 12,
-    color: "#202124",
-    fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
-  },
   divider: {
     height: 1,
     backgroundColor: "#E8EAED",
@@ -402,6 +345,26 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  bottomActions: {
+    padding: 20,
+    paddingBottom: 32,
+  },
+  directionsButton: {
+    backgroundColor: "#1A73E8",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    gap: 8,
+  },
+  directionsButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "500",
+    fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
   },
   section: {
     paddingHorizontal: 20,

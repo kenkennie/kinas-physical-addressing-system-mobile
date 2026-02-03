@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+// components/SearchBar.tsx
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   TextInput,
@@ -8,11 +9,13 @@ import {
   FlatList,
   Keyboard,
   Platform,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSearchStore } from "../stores/search.store";
 import { useMapStore } from "../stores/map.store";
 import { apiService } from "../services/api.service";
+import { debounce } from "lodash"; // Install: npm install lodash @types/lodash
 
 interface SearchBarProps {
   showDirections?: boolean;
@@ -22,15 +25,58 @@ export const SearchBar: React.FC<SearchBarProps> = ({
   showDirections = false,
 }) => {
   const [isFocused, setIsFocused] = useState(false);
-  const [focusedInput, setFocusedInput] = useState<
-    "origin" | "destination" | null
-  >(null);
-  const { query, setQuery, recentSearches, addRecentSearch } = useSearchStore();
-  const { setSearchResults, setLoading, setError, activeRoute, userLocation } =
-    useMapStore();
+  const [focusedInput, setFocusedInput] = useState;
+  "origin" | "destination" | (null > null);
+
+  const {
+    query,
+    setQuery,
+    recentSearches,
+    addRecentSearch,
+    removeRecentSearch,
+    clearRecentSearches,
+    suggestions,
+    setSuggestions,
+    isSearching,
+    setIsSearching,
+  } = useSearchStore();
+
+  const { setSearchResults, setLoading, setError, activeRoute } = useMapStore();
 
   const [originText, setOriginText] = useState("Your location");
   const [destinationText, setDestinationText] = useState("");
+
+  // Debounced search for auto-suggestions
+  const fetchSuggestions = useCallback(
+    debounce(async (searchQuery: string) => {
+      if (!searchQuery.trim() || searchQuery.length < 2) {
+        setSuggestions([]);
+        return;
+      }
+
+      try {
+        setIsSearching(true);
+        const results = await apiService.getSuggestions(searchQuery);
+        setSuggestions(results);
+      } catch (error) {
+        console.error("Suggestions error:", error);
+        setSuggestions([]);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 300),
+    [],
+  );
+
+  // Trigger suggestions when query changes
+  useEffect(() => {
+    if (isFocused) {
+      fetchSuggestions(query);
+    }
+    return () => {
+      fetchSuggestions.cancel();
+    };
+  }, [query, isFocused]);
 
   const handleSearch = async (searchQuery: string) => {
     if (!searchQuery.trim()) return;
@@ -38,16 +84,17 @@ export const SearchBar: React.FC<SearchBarProps> = ({
     try {
       setLoading(true);
       setError(null);
+      Keyboard.dismiss();
 
       const results = await apiService.searchAddress({
         lr_no: searchQuery,
-        physical_address: searchQuery,
       });
 
       setSearchResults(results);
       addRecentSearch(searchQuery);
-      Keyboard.dismiss();
       setIsFocused(false);
+      setQuery("");
+      setSuggestions([]);
     } catch (error) {
       setError("Failed to search. Please try again.");
       console.error("Search error:", error);
@@ -56,12 +103,114 @@ export const SearchBar: React.FC<SearchBarProps> = ({
     }
   };
 
+  const handleSelectSuggestion = (suggestion: string) => {
+    setQuery(suggestion);
+    handleSearch(suggestion);
+  };
+
+  const handleSelectRecent = (recent: string) => {
+    setQuery(recent);
+    handleSearch(recent);
+  };
+
+  const renderDropdownContent = () => {
+    // Show suggestions if user is typing
+    if (query.length >= 2 && suggestions.length > 0) {
+      return (
+        <View style={styles.dropdownSection}>
+          <Text style={styles.dropdownHeader}>Suggestions</Text>
+          <FlatList
+            data={suggestions}
+            keyExtractor={(item, index) => `suggestion-${index}`}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={styles.dropdownItem}
+                onPress={() => handleSelectSuggestion(item)}
+              >
+                <Ionicons
+                  name="search"
+                  size={20}
+                  color="#5F6368"
+                />
+                <Text style={styles.dropdownText}>{item}</Text>
+                <TouchableOpacity
+                  style={styles.arrowButton}
+                  onPress={() => setQuery(item)}
+                >
+                  <Ionicons
+                    name="arrow-up-outline"
+                    size={18}
+                    color="#5F6368"
+                  />
+                </TouchableOpacity>
+              </TouchableOpacity>
+            )}
+          />
+        </View>
+      );
+    }
+
+    // Show recent searches
+    if (recentSearches.length > 0) {
+      return (
+        <View style={styles.dropdownSection}>
+          <View style={styles.recentHeader}>
+            <Text style={styles.dropdownHeader}>Recent searches</Text>
+            <TouchableOpacity onPress={clearRecentSearches}>
+              <Text style={styles.clearText}>Clear all</Text>
+            </TouchableOpacity>
+          </View>
+          <FlatList
+            data={recentSearches}
+            keyExtractor={(item, index) => `recent-${index}`}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={styles.dropdownItem}
+                onPress={() => handleSelectRecent(item)}
+              >
+                <Ionicons
+                  name="time-outline"
+                  size={20}
+                  color="#5F6368"
+                />
+                <Text style={styles.dropdownText}>{item}</Text>
+                <View style={styles.recentActions}>
+                  <TouchableOpacity
+                    style={styles.arrowButton}
+                    onPress={() => setQuery(item)}
+                  >
+                    <Ionicons
+                      name="arrow-up-outline"
+                      size={18}
+                      color="#5F6368"
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.deleteButton}
+                    onPress={() => removeRecentSearch(item)}
+                  >
+                    <Ionicons
+                      name="close"
+                      size={18}
+                      color="#5F6368"
+                    />
+                  </TouchableOpacity>
+                </View>
+              </TouchableOpacity>
+            )}
+          />
+        </View>
+      );
+    }
+
+    return null;
+  };
+
   // Show directions-style search when navigating
   if (showDirections || activeRoute) {
     return (
       <View style={styles.container}>
         <View style={styles.directionsBox}>
-          {/* Back button */}
           <TouchableOpacity style={styles.backButton}>
             <Ionicons
               name="arrow-back"
@@ -71,7 +220,6 @@ export const SearchBar: React.FC<SearchBarProps> = ({
           </TouchableOpacity>
 
           <View style={styles.inputsContainer}>
-            {/* Origin input */}
             <View style={styles.inputRow}>
               <View style={styles.originDot} />
               <TextInput
@@ -87,7 +235,6 @@ export const SearchBar: React.FC<SearchBarProps> = ({
 
             <View style={styles.dividerLine} />
 
-            {/* Destination input */}
             <View style={styles.inputRow}>
               <View style={styles.destinationDot} />
               <TextInput
@@ -121,41 +268,6 @@ export const SearchBar: React.FC<SearchBarProps> = ({
             />
           </TouchableOpacity>
         </View>
-
-        {/* Recent searches dropdown */}
-        {focusedInput && recentSearches.length > 0 && (
-          <View style={styles.dropdown}>
-            <FlatList
-              data={recentSearches.slice(0, 5)}
-              keyExtractor={(item, index) => `${item}-${index}`}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.recentItem}
-                  onPress={() => {
-                    if (focusedInput === "destination") {
-                      setDestinationText(item);
-                      handleSearch(item);
-                    }
-                  }}
-                >
-                  <Ionicons
-                    name="time-outline"
-                    size={20}
-                    color="#5F6368"
-                  />
-                  <Text style={styles.recentText}>{item}</Text>
-                  <TouchableOpacity style={styles.arrowButton}>
-                    <Ionicons
-                      name="arrow-up-outline"
-                      size={18}
-                      color="#5F6368"
-                    />
-                  </TouchableOpacity>
-                </TouchableOpacity>
-              )}
-            />
-          </View>
-        )}
       </View>
     );
   }
@@ -181,7 +293,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
           />
           <TextInput
             style={styles.input}
-            placeholder="Search parcels"
+            placeholder="Search by LR number (e.g., 209/12345)"
             placeholderTextColor="#80868B"
             value={query}
             onChangeText={setQuery}
@@ -189,10 +301,20 @@ export const SearchBar: React.FC<SearchBarProps> = ({
             onBlur={() => setTimeout(() => setIsFocused(false), 200)}
             onSubmitEditing={() => handleSearch(query)}
             returnKeyType="search"
+            autoCapitalize="none"
+            autoCorrect={false}
           />
-          {query.length > 0 && (
+          {isSearching ? (
+            <ActivityIndicator
+              size="small"
+              color="#5F6368"
+            />
+          ) : query.length > 0 ? (
             <TouchableOpacity
-              onPress={() => setQuery("")}
+              onPress={() => {
+                setQuery("");
+                setSuggestions([]);
+              }}
               style={styles.clearButton}
             >
               <Ionicons
@@ -201,7 +323,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
                 color="#5F6368"
               />
             </TouchableOpacity>
-          )}
+          ) : null}
         </View>
 
         <TouchableOpacity style={styles.micButton}>
@@ -213,37 +335,9 @@ export const SearchBar: React.FC<SearchBarProps> = ({
         </TouchableOpacity>
       </View>
 
-      {/* Recent searches dropdown */}
-      {isFocused && recentSearches.length > 0 && (
-        <View style={styles.dropdown}>
-          <FlatList
-            data={recentSearches.slice(0, 5)}
-            keyExtractor={(item, index) => `${item}-${index}`}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={styles.recentItem}
-                onPress={() => {
-                  setQuery(item);
-                  handleSearch(item);
-                }}
-              >
-                <Ionicons
-                  name="time-outline"
-                  size={20}
-                  color="#5F6368"
-                />
-                <Text style={styles.recentText}>{item}</Text>
-                <TouchableOpacity style={styles.arrowButton}>
-                  <Ionicons
-                    name="arrow-up-outline"
-                    size={18}
-                    color="#5F6368"
-                  />
-                </TouchableOpacity>
-              </TouchableOpacity>
-            )}
-          />
-        </View>
+      {/* Dropdown with suggestions or recent searches */}
+      {isFocused && (suggestions.length > 0 || recentSearches.length > 0) && (
+        <View style={styles.dropdown}>{renderDropdownContent()}</View>
       )}
     </View>
   );
@@ -252,7 +346,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
 const styles = StyleSheet.create({
   container: {
     position: "absolute",
-    top: Platform.OS === "ios" ? 70 : 50, // More space from status bar
+    top: Platform.OS === "ios" ? 70 : 50,
     left: 12,
     right: 12,
     zIndex: 100,
@@ -304,7 +398,7 @@ const styles = StyleSheet.create({
     padding: 8,
     marginLeft: 4,
   },
-  // Directions-style search
+  // Directions
   directionsBox: {
     flexDirection: "row",
     alignItems: "center",
@@ -363,6 +457,7 @@ const styles = StyleSheet.create({
     padding: 8,
     marginLeft: 4,
   },
+  // Dropdown
   dropdown: {
     backgroundColor: "#FFFFFF",
     borderRadius: 8,
@@ -372,24 +467,57 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.18,
     shadowRadius: 4,
     elevation: 5,
-    maxHeight: 300,
+    maxHeight: 400,
   },
-  recentItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 14,
+  dropdownSection: {
+    paddingVertical: 8,
+  },
+  dropdownHeader: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#5F6368",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
     paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#E8EAED",
-  },
-  recentText: {
-    flex: 1,
-    fontSize: 16,
-    color: "#202124",
-    marginLeft: 16,
+    paddingVertical: 8,
     fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
   },
+  recentHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  clearText: {
+    fontSize: 12,
+    color: "#1A73E8",
+    fontWeight: "500",
+    fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+  },
+  dropdownItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F1F3F4",
+  },
+  dropdownText: {
+    flex: 1,
+    fontSize: 15,
+    color: "#202124",
+    marginLeft: 12,
+    fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+  },
+  recentActions: {
+    flexDirection: "row",
+    gap: 8,
+  },
   arrowButton: {
+    padding: 4,
+  },
+  deleteButton: {
     padding: 4,
   },
 });

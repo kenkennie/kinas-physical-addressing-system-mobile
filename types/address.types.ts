@@ -31,7 +31,6 @@ const EntryPointSchema = z.object({
 export const ParcelSchema = z.object({
   gid: z.number(),
   lr_no: z.string(),
-  fr_no: z.string().nullable().optional(), // Made optional/nullable
   area: z.coerce.number(), // VERY IMPORTANT: DB returns numeric as string
   entity: z.string().nullable().optional(),
   physical_address: z.string().nullable().optional(),
@@ -56,6 +55,7 @@ export const ParcelDetailsSchema = z.object({
       name: z.string(),
       constituen: z.string().optional().nullable(),
       county_nam: z.string().optional().nullable(),
+      short_name: z.string().optional().nullable(),
     })
     .nullable(),
   centroid: CoordinateSchema, // Now handles the json_build_object from backend

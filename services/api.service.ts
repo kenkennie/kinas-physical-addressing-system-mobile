@@ -68,9 +68,9 @@ class ApiService {
     return ParcelDetailsSchema.parse(response.data);
   }
 
+  // services/api.service.ts
   async searchAddress(params: {
     lr_no?: string;
-    fr_no?: string;
     physical_address?: string;
     lat?: number;
     lng?: number;
@@ -78,6 +78,20 @@ class ApiService {
   }) {
     const response = await this.client.post("/address/search", params);
     return z.array(ParcelDetailsSchema).parse(response.data);
+  }
+
+  // Add suggestion endpoint
+  async getSuggestions(query: string) {
+    try {
+      const response = await this.client.get("/address/suggestions", {
+        params: { q: query, limit: 5 },
+      });
+      return z.array(z.string()).parse(response.data);
+    } catch (error) {
+      // If suggestions endpoint doesn't exist yet, return empty array
+      console.log("Suggestions not available");
+      return [];
+    }
   }
 
   async getParcelDetails(lr_no: string) {
