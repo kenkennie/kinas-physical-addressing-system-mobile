@@ -59,7 +59,7 @@ export const SearchResultsList: React.FC = () => {
                 style={styles.resultSubtitle}
                 numberOfLines={1}
               >
-                {item.administrative_block?.name || "Nairobi"}
+                {item.administrative_block?.name}
                 {item.administrative_block?.constituen &&
                   `, ${item.administrative_block.constituen}`}
               </Text>

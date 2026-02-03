@@ -1,28 +1,138 @@
-import React, { useState } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import {
   View,
   Text,
-  StyleSheet,
-  TouchableOpacity,
   ScrollView,
-  Dimensions,
-  Platform,
+  TouchableOpacity,
   Alert,
+  Share,
+  StyleSheet,
   Animated,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import { useMapStore } from "../stores/map.store";
 import { apiService } from "../services/api.service";
-import { Share } from "react-native";
+import { ParcelDetails } from "../types/address.types";
 
-const { height } = Dimensions.get("window");
+// ---------------------------------------------------------------------------
+// Types (for local components that need extended types)
+// ---------------------------------------------------------------------------
+interface Road {
+  gid: string | number;
+  name?: string | null;
+  distance_meters: number;
+}
 
+interface EntryPoint {
+  gid: string | number;
+  label: string;
+  distance_to_parcel_meters: number;
+  nearest_roads?: Road[];
+}
+
+interface AdministrativeBlock {
+  name: string;
+  short_name?: string;
+  constituen?: string;
+}
+
+interface Parcel {
+  gid: string;
+  lr_no: string;
+  area: number;
+}
+
+interface SelectedParcelData {
+  parcel: Parcel;
+  administrative_block?: AdministrativeBlock;
+  entry_points: EntryPoint[];
+}
+
+// ---------------------------------------------------------------------------
+// Helper: derive display title
+// ---------------------------------------------------------------------------
+function displayTitle(data: ParcelDetails): string {
+  const block = data.administrative_block?.short_name || "N/A";
+  const lrSuffix = data.parcel.lr_no.split("/")[1] || data.parcel.lr_no;
+  return `${block}/${lrSuffix}`;
+}
+
+// ---------------------------------------------------------------------------
+// Small reusable sub-components
+// ---------------------------------------------------------------------------
+const SectionDivider = () => <View style={styles.divider} />;
+
+const InfoRow: React.FC<{ icon: string; label: string; value: string }> = ({
+  icon,
+  label,
+  value,
+}) => (
+  <View style={styles.infoRow}>
+    <Ionicons
+      name={icon as any}
+      size={18}
+      color="#5F6368"
+    />
+    <Text style={styles.infoLabel}>{label}</Text>
+    <Text
+      style={styles.infoValue}
+      numberOfLines={1}
+    >
+      {value}
+    </Text>
+  </View>
+);
+
+const RoadItem: React.FC<{ road: Road }> = ({ road }) => (
+  <View style={styles.roadRow}>
+    <Ionicons
+      name="navigate-outline"
+      size={14}
+      color="#5F6368"
+    />
+    <Text
+      style={styles.roadName}
+      numberOfLines={1}
+    >
+      {road.name || "Unnamed Road"}
+    </Text>
+    <Text style={styles.roadDistance}>{road.distance_meters}m</Text>
+  </View>
+);
+
+const EntryPointCard: React.FC<{ entry: EntryPoint }> = ({ entry }) => (
+  <View style={styles.entryCard}>
+    <View style={styles.entryHeader}>
+      <View style={styles.entryBadge}>
+        <Text style={styles.entryBadgeText}>EP {entry.label}</Text>
+      </View>
+      <Text style={styles.entryDistance}>
+        {entry.distance_to_parcel_meters}m from parcel
+      </Text>
+    </View>
+
+    {entry.nearest_roads && entry.nearest_roads.length > 0 && (
+      <View style={styles.roadsContainer}>
+        <Text style={styles.roadsLabel}>Nearby Roads</Text>
+        {entry.nearest_roads.slice(0, 2).map((road: Road) => (
+          <RoadItem
+            key={road.gid}
+            road={road}
+          />
+        ))}
+      </View>
+    )}
+  </View>
+);
+
+// ---------------------------------------------------------------------------
+// Main component
+// ---------------------------------------------------------------------------
 export const ParcelDetailsSheet: React.FC = () => {
   const {
     selectedParcel,
     setSelectedParcel,
-    userLocation,
     setUserLocation,
     transportMode,
     setAlternativeRoutes,
@@ -32,19 +142,18 @@ export const ParcelDetailsSheet: React.FC = () => {
     setError,
     activeRoute,
   } = useMapStore();
-  const [sheetCollapsed, setSheetCollapsed] = useState(false);
 
-  // Don't show if there's an active route - show direction sheet instead
-  if (!selectedParcel || activeRoute) return null;
+  const [collapsed, setCollapsed] = useState(false);
 
-  const handleDirections = async () => {
+  // All hooks must be called unconditionally at the top level
+  // before any conditional returns
+  const handleDirections = useCallback(async () => {
+    if (!selectedParcel) return;
+
     try {
       setLoading(true);
       setError(null);
 
-      let origin = userLocation;
-
-      // Get current location
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
         Alert.alert(
@@ -54,20 +163,10 @@ export const ParcelDetailsSheet: React.FC = () => {
         return;
       }
 
-      const location = await Location.getCurrentPositionAsync({});
-      origin = {
-        lat: location.coords.latitude,
-        lng: location.coords.longitude,
-      };
-
+      const { coords } = await Location.getCurrentPositionAsync({});
+      const origin = { lat: coords.latitude, lng: coords.longitude };
       setUserLocation(origin);
 
-      if (!origin) {
-        Alert.alert("Error", "Please set your starting location");
-        return;
-      }
-
-      // Check for multiple entry points
       if (selectedParcel.entry_points.length > 1) {
         const alternatives = await apiService.getAlternativeRoutes({
           gid: selectedParcel.parcel.gid,
@@ -75,7 +174,6 @@ export const ParcelDetailsSheet: React.FC = () => {
           destination_lr_no: selectedParcel.parcel.lr_no,
           mode: transportMode,
         });
-
         setAlternativeRoutes(alternatives);
         setActiveRoute(alternatives[0]);
         setIsSelectingRoute(true);
@@ -86,12 +184,9 @@ export const ParcelDetailsSheet: React.FC = () => {
           destination_lr_no: selectedParcel.parcel.lr_no,
           mode: transportMode,
         });
-
         setActiveRoute(route);
         setIsSelectingRoute(false);
       }
-
-      // Keep parcel selected - don't clear it
     } catch (error) {
       console.error(error);
       setError("Failed to calculate route");
@@ -99,41 +194,54 @@ export const ParcelDetailsSheet: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedParcel, transportMode]);
 
-  // Share function
-  const handleShare = async () => {
+  const handleShare = useCallback(async () => {
+    if (!selectedParcel) return;
+
     try {
       await Share.share({
-        message: `Parcel: ${selectedParcel.administrative_block?.short_name || "N/A"}/${selectedParcel.parcel.lr_no.split("/")[1] || selectedParcel.parcel.lr_no}\nArea: ${selectedParcel.parcel.area} hectares`,
+        message:
+          `Parcel: ${displayTitle(selectedParcel)}\n` +
+          `Area: ${selectedParcel.parcel.area} hectares`,
       });
     } catch (error) {
       console.error(error);
     }
-  };
+  }, [selectedParcel]);
 
-  const handleSave = async () => {
-    // TODO: Implement save functionality
-    Alert.alert("Save", "Save functionality coming soon");
-  };
+  useEffect(() => {
+    if (selectedParcel) {
+      setCollapsed(false);
+    }
+  }, [selectedParcel]);
+
+  // Hide when nothing is selected, or when a route is active
+  // (RouteInstructions takes over at that point).
+  if (!selectedParcel || activeRoute) return null;
 
   return (
     <Animated.View
-      style={[styles.container, sheetCollapsed && styles.containerCollapsed]}
+      style={[styles.container, collapsed && styles.containerCollapsed]}
     >
-      <TouchableOpacity onPress={() => setSheetCollapsed(!sheetCollapsed)}>
+      {/* Drag handle — toggles collapse */}
+      <TouchableOpacity
+        onPress={() => setCollapsed((prev) => !prev)}
+        hitSlop={{ top: 8, bottom: 8, left: 24, right: 24 }}
+      >
         <View style={styles.dragHandle} />
       </TouchableOpacity>
 
-      {/* Header section */}
+      {/* Header — always visible */}
       <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <Text style={styles.title}>
-            {selectedParcel.administrative_block?.short_name || "N/A"}/
-            {selectedParcel.parcel.lr_no.split("/")[1] ||
-              selectedParcel.parcel.lr_no}
-          </Text>
-        </View>
+        <Text
+          style={styles.title}
+          numberOfLines={1}
+        >
+          {displayTitle(selectedParcel)}
+        </Text>
+
+        {/* Share button */}
         <View style={styles.headerButtons}>
           <TouchableOpacity
             style={styles.iconButton}
@@ -145,125 +253,83 @@ export const ParcelDetailsSheet: React.FC = () => {
               color="#5F6368"
             />
           </TouchableOpacity>
+
+          {/* Expand when collapsed, dismiss when expanded */}
           <TouchableOpacity
             style={styles.iconButton}
-            onPress={() => setSheetCollapsed(true)}
+            onPress={
+              collapsed
+                ? () => setCollapsed(false)
+                : () => setSelectedParcel(null)
+            }
           >
             <Ionicons
-              name="close"
+              name={collapsed ? "chevron-up" : "close"}
               size={24}
               color="#5F6368"
             />
           </TouchableOpacity>
         </View>
       </View>
-      {!sheetCollapsed && (
+
+      {/* Body — hidden when collapsed */}
+      {!collapsed && (
         <>
-          <View style={styles.divider} />
+          <SectionDivider />
 
           <ScrollView
             style={styles.content}
             showsVerticalScrollIndicator={false}
           >
-            {/* Parcel Information */}
+            {/* Location / Constituency / Area */}
             <View style={styles.section}>
               {selectedParcel.administrative_block && (
                 <>
-                  <View style={styles.infoRow}>
-                    <Ionicons
-                      name="location-outline"
-                      size={18}
-                      color="#5F6368"
-                    />
-                    <Text style={styles.infoLabel}>Location</Text>
-                    <Text style={styles.infoValue}>
-                      {selectedParcel.administrative_block.name}
-                    </Text>
-                  </View>
-
+                  <InfoRow
+                    icon="location-outline"
+                    label="Location"
+                    value={selectedParcel.administrative_block.name}
+                  />
                   {selectedParcel.administrative_block.constituen && (
-                    <View style={styles.infoRow}>
-                      <Ionicons
-                        name="business-outline"
-                        size={18}
-                        color="#5F6368"
-                      />
-                      <Text style={styles.infoLabel}>Constituency</Text>
-                      <Text style={styles.infoValue}>
-                        {selectedParcel.administrative_block.constituen}
-                      </Text>
-                    </View>
+                    <InfoRow
+                      icon="business-outline"
+                      label="Constituency"
+                      value={selectedParcel.administrative_block.constituen}
+                    />
                   )}
                 </>
               )}
+              <InfoRow
+                icon="square-outline"
+                label="Area"
+                value={`${selectedParcel.parcel.area} hectares`}
+              />
             </View>
 
-            {/* Entry Points */}
-            {selectedParcel.entry_points &&
-              selectedParcel.entry_points.length > 0 && (
-                <>
-                  <View style={styles.divider} />
-                  <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>
-                      Access Points ({selectedParcel.entry_points.length})
-                    </Text>
+            {/* Access / Entry points */}
+            {selectedParcel.entry_points.length > 0 && (
+              <>
+                <SectionDivider />
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>
+                    Access Points ({selectedParcel.entry_points.length})
+                  </Text>
+                  {selectedParcel.entry_points.map((entry) => (
+                    <EntryPointCard
+                      key={entry.gid}
+                      entry={entry}
+                    />
+                  ))}
+                </View>
+              </>
+            )}
 
-                    {selectedParcel.entry_points.map((entry: any) => (
-                      <View
-                        key={entry.gid}
-                        style={styles.entryCard}
-                      >
-                        <View style={styles.entryHeader}>
-                          <View style={styles.entryBadge}>
-                            <Text style={styles.entryBadgeText}>
-                              EP {entry.label}
-                            </Text>
-                          </View>
-                          <Text style={styles.entryDistance}>
-                            {entry.distance_to_parcel_meters}m from parcel
-                          </Text>
-                        </View>
-
-                        {entry.nearest_roads &&
-                          entry.nearest_roads.length > 0 && (
-                            <View style={styles.roadsContainer}>
-                              <Text style={styles.roadsLabel}>
-                                Nearby Roads
-                              </Text>
-                              {entry.nearest_roads
-                                .slice(0, 2)
-                                .map((road: any) => (
-                                  <View
-                                    key={road.gid}
-                                    style={styles.roadRow}
-                                  >
-                                    <Ionicons
-                                      name="navigate-outline"
-                                      size={14}
-                                      color="#5F6368"
-                                    />
-                                    <Text
-                                      style={styles.roadName}
-                                      numberOfLines={1}
-                                    >
-                                      {road.name || "Unnamed Road"}
-                                    </Text>
-                                    <Text style={styles.roadDistance}>
-                                      {road.distance_meters}m
-                                    </Text>
-                                  </View>
-                                ))}
-                            </View>
-                          )}
-                      </View>
-                    ))}
-                  </View>
-                </>
-              )}
+            {/* Get Directions CTA */}
             <View style={styles.bottomActions}>
               <TouchableOpacity
                 style={styles.directionsButton}
                 onPress={handleDirections}
+                activeOpacity={0.75}
               >
                 <Ionicons
                   name="navigate"
@@ -280,6 +346,9 @@ export const ParcelDetailsSheet: React.FC = () => {
   );
 };
 
+// ---------------------------------------------------------------------------
+// Styles
+// ---------------------------------------------------------------------------
 const styles = StyleSheet.create({
   container: {
     position: "absolute",
@@ -289,165 +358,156 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
-    maxHeight: height * 0.75,
+    maxHeight: "65%",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.12,
     shadowRadius: 8,
-    elevation: 10,
+    elevation: 8,
   },
   containerCollapsed: {
-    maxHeight: 80, // Just show header when collapsed
+    maxHeight: undefined,
   },
+
   dragHandle: {
     width: 36,
     height: 4,
-    backgroundColor: "#DADCE0",
     borderRadius: 2,
+    backgroundColor: "#DADCE0",
     alignSelf: "center",
     marginTop: 8,
-    marginBottom: 12,
+    marginBottom: 4,
   },
+
   header: {
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
-    alignItems: "flex-start",
-    paddingHorizontal: 20,
-    paddingBottom: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
   },
-  headerContent: {
+  title: {
     flex: 1,
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#202124",
+    marginRight: 8,
   },
   headerButtons: {
     flexDirection: "row",
-    gap: 8,
+    gap: 4,
   },
   iconButton: {
-    padding: 8,
-    marginTop: -8,
+    padding: 6,
+    borderRadius: 20,
   },
-  title: {
-    fontSize: 22,
-    fontWeight: "500",
-    color: "#202124",
-    marginBottom: 4,
-    fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
-  },
-  subtitle: {
-    fontSize: 14,
-    color: "#5F6368",
-    fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
-  },
+
   divider: {
     height: 1,
     backgroundColor: "#E8EAED",
-    marginHorizontal: 20,
+    marginHorizontal: 16,
   },
+
   content: {
-    flex: 1,
+    paddingBottom: 24,
   },
+
+  section: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 10,
+  },
+  sectionTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#5F6368",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+
+  infoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  infoLabel: {
+    width: 90,
+    fontSize: 14,
+    color: "#5F6368",
+  },
+  infoValue: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#202124",
+  },
+
+  entryCard: {
+    backgroundColor: "#F8F9FA",
+    borderRadius: 10,
+    padding: 12,
+    gap: 8,
+  },
+  entryHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  entryBadge: {
+    backgroundColor: "#E8F0FE",
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  entryBadgeText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#1A73E8",
+  },
+  entryDistance: {
+    fontSize: 12,
+    color: "#5F6368",
+  },
+
+  roadsContainer: { gap: 4 },
+  roadsLabel: {
+    fontSize: 12,
+    color: "#80868B",
+    marginBottom: 2,
+  },
+  roadRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  roadName: {
+    flex: 1,
+    fontSize: 13,
+    color: "#3C4043",
+  },
+  roadDistance: {
+    fontSize: 12,
+    color: "#80868B",
+  },
+
   bottomActions: {
-    padding: 20,
-    paddingBottom: 32,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 24,
   },
   directionsButton: {
-    backgroundColor: "#1A73E8",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 14,
-    paddingHorizontal: 24,
+    backgroundColor: "#1A73E8",
     borderRadius: 8,
+    paddingVertical: 12,
     gap: 8,
   },
   directionsButtonText: {
     color: "#FFFFFF",
     fontSize: 16,
-    fontWeight: "500",
-    fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
-  },
-  section: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: "500",
-    color: "#202124",
-    marginBottom: 12,
-    fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
-  },
-  infoRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 10,
-    gap: 12,
-  },
-  infoLabel: {
-    fontSize: 14,
-    color: "#5F6368",
-    flex: 1,
-    fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
-  },
-  infoValue: {
-    fontSize: 14,
-    color: "#202124",
-    fontWeight: "500",
-    fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
-  },
-  entryCard: {
-    backgroundColor: "#F8F9FA",
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
-  },
-  entryHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  entryBadge: {
-    backgroundColor: "#1A73E8",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  entryBadgeText: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "500",
-    fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
-  },
-  entryDistance: {
-    fontSize: 12,
-    color: "#5F6368",
-    fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
-  },
-  roadsContainer: {
-    gap: 8,
-  },
-  roadsLabel: {
-    fontSize: 12,
-    color: "#5F6368",
-    marginBottom: 4,
-    fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
-  },
-  roadRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 4,
-  },
-  roadName: {
-    flex: 1,
-    fontSize: 13,
-    color: "#202124",
-    fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
-  },
-  roadDistance: {
-    fontSize: 12,
-    color: "#5F6368",
-    fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+    fontWeight: "600",
   },
 });

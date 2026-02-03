@@ -7,6 +7,7 @@ import {
   Coordinate,
   RouteResponse,
 } from "@/types/address.types";
+import { SuggestionItem } from "@/stores/search.store";
 import z from "zod";
 import { API_CONFIG } from "@/config/mapbox.config";
 
@@ -76,17 +77,26 @@ class ApiService {
     lng?: number;
     radius?: number;
   }) {
-    const response = await this.client.post("/address/search", params);
+    const response = await this.client.post("/land-parcel/search", params);
     return z.array(ParcelDetailsSchema).parse(response.data);
   }
 
   // Add suggestion endpoint
-  async getSuggestions(query: string) {
+  async getSuggestions(query: string): Promise<SuggestionItem[]> {
     try {
-      const response = await this.client.get("/address/suggestions", {
+      const response = await this.client.get("/land-parcel/suggestions", {
         params: { q: query, limit: 5 },
       });
-      return z.array(z.string()).parse(response.data);
+
+      return z
+        .array(
+          z.object({
+            lr_no: z.string(),
+            short_name: z.string().nullable(),
+            constituency: z.string().nullable(),
+          }),
+        )
+        .parse(response.data);
     } catch (error) {
       // If suggestions endpoint doesn't exist yet, return empty array
       console.log("Suggestions not available");
@@ -94,8 +104,8 @@ class ApiService {
     }
   }
 
-  async getParcelDetails(lr_no: string) {
-    const response = await this.client.get(`/address/parcel/${lr_no}`);
+  async getParcelDetails(gid: number) {
+    const response = await this.client.get(`/land-parcel/parcel/${gid}`);
     return ParcelDetailsSchema.parse(response.data);
   }
 

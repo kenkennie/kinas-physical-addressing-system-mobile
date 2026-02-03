@@ -15,15 +15,15 @@ export const MapView: React.FC = () => {
 
   // Kenya bounds - prevents panning outside Kenya
   const KENYA_BOUNDS = {
-    ne: [46.899578, 6.019978], // Northeast corner
-    sw: [33.908859, -4.678047], // Southwest corner
+    ne: [46.899578, 6.019978],
+    sw: [33.908859, -4.678047],
   };
 
   // Zoom level constraints
   const ZOOM_CONSTRAINTS = {
-    MIN_ZOOM: 6, // Shows all of Kenya
-    MAX_ZOOM: 20, // Prevents over-zooming
-    PARCEL_LABELS_MIN_ZOOM: 15, // Only show labels when zoomed in enough
+    MIN_ZOOM: 6,
+    MAX_ZOOM: 20,
+    PARCEL_LABELS_MIN_ZOOM: 15,
   };
 
   const [clickedLocation, setClickedLocation] = useState<{
@@ -44,7 +44,7 @@ export const MapView: React.FC = () => {
 
   const entryPoint = activeRoute?.destination?.entry_point;
 
-  // Get user location on mount
+  // ── initial location ──────────────────────────────────────────────────
   useEffect(() => {
     const initializeLocation = async () => {
       try {
@@ -82,6 +82,24 @@ export const MapView: React.FC = () => {
     initializeLocation();
   }, []);
 
+  // ── FIX 2: zoom to parcel whenever selectedParcel changes ─────────────
+  // Previously zoom only happened inside handleParcelPress (vector-tile tap).
+  // When SearchBar sets selectedParcel via the store, MapView never saw it.
+  // This effect covers BOTH paths: map tap and search.
+  useEffect(() => {
+    if (selectedParcel?.centroid) {
+      cameraRef.current?.setCamera({
+        centerCoordinate: [
+          selectedParcel.centroid.lng,
+          selectedParcel.centroid.lat,
+        ],
+        zoomLevel: Math.min(18, ZOOM_CONSTRAINTS.MAX_ZOOM),
+        animationDuration: 800,
+      });
+    }
+  }, [selectedParcel]);
+
+  // ── tap handlers ──────────────────────────────────────────────────────
   const handleParcelPress = async (event: any) => {
     const { coordinates } = event;
     if (!coordinates) return;
@@ -92,15 +110,8 @@ export const MapView: React.FC = () => {
       setLoading(true);
       const data = await apiService.getParcelByGid(lat, lng);
       setSelectedParcel(data);
-
-      // Zoom to parcel - respecting max zoom
-      if (data.centroid) {
-        cameraRef.current?.setCamera({
-          centerCoordinate: [data.centroid.lng, data.centroid.lat],
-          zoomLevel: Math.min(18, ZOOM_CONSTRAINTS.MAX_ZOOM), // Cap at 18 for parcel view
-          animationDuration: 800,
-        });
-      }
+      // Zoom is now handled by the useEffect above — no need to call
+      // setCamera here anymore.  Kept setSelectedParcel so the effect fires.
     } catch (error) {
       console.log("Error fetching parcel:", error);
     } finally {
@@ -116,6 +127,7 @@ export const MapView: React.FC = () => {
       setLoading(true);
       const data = await apiService.identifyParcel(lat, lng);
       setSelectedParcel(data);
+      // Zoom handled by the useEffect above.
     } catch (error) {
       console.log("No parcel found at this location");
     } finally {
@@ -123,7 +135,7 @@ export const MapView: React.FC = () => {
     }
   };
 
-  // Render all alternative routes when selecting
+  // ── route rendering ───────────────────────────────────────────────────
   const renderRoutes = () => {
     if (!isSelectingRoute || alternativeRoutes.length === 0) {
       return activeRoute ? renderSingleRoute(activeRoute) : null;
@@ -196,15 +208,13 @@ export const MapView: React.FC = () => {
     );
   };
 
-  // Auto-zoom to route when active
+  // ── auto-zoom to fit route ────────────────────────────────────────────
   useEffect(() => {
     if (activeRoute && entryPoint && userLocation) {
-      // Calculate bounds to show both user location and destination
       const minLng = Math.min(userLocation.lng, entryPoint.coordinates.lng);
       const minLat = Math.min(userLocation.lat, entryPoint.coordinates.lat);
       const maxLng = Math.max(userLocation.lng, entryPoint.coordinates.lng);
       const maxLat = Math.max(userLocation.lat, entryPoint.coordinates.lat);
-      const bounds = [minLng, minLat, maxLng, maxLat];
 
       cameraRef.current?.setCamera({
         bounds: {
@@ -216,6 +226,7 @@ export const MapView: React.FC = () => {
     }
   }, [activeRoute, entryPoint, userLocation]);
 
+  // ── render ────────────────────────────────────────────────────────────
   return (
     <View style={styles.container}>
       <MapboxGL.MapView
@@ -226,7 +237,7 @@ export const MapView: React.FC = () => {
         logoEnabled={false}
         attributionEnabled={false}
         compassEnabled={true}
-        compassViewPosition={3} // Top right
+        compassViewPosition={3}
         compassViewMargins={{ x: 16, y: Platform.OS === "ios" ? 140 : 100 }}
       >
         <MapboxGL.Camera
@@ -243,7 +254,7 @@ export const MapView: React.FC = () => {
           animationDuration={1000}
         />
 
-        {/* User Location with Google Maps style */}
+        {/* User location */}
         <MapboxGL.UserLocation
           visible={true}
           showsUserHeadingIndicator={true}
@@ -251,10 +262,10 @@ export const MapView: React.FC = () => {
           minDisplacement={10}
         />
 
-        {/* Render routes */}
+        {/* Routes */}
         {renderRoutes()}
 
-        {/* Destination Marker - Google Maps style */}
+        {/* Destination marker */}
         {entryPoint && (
           <MapboxGL.PointAnnotation
             id="destinationMarker"
@@ -269,7 +280,7 @@ export const MapView: React.FC = () => {
           </MapboxGL.PointAnnotation>
         )}
 
-        {/* Vector Tile Source - Parcels */}
+        {/* Parcel vector tiles */}
         <MapboxGL.VectorSource
           id="parcels-source"
           tileUrlTemplates={[
@@ -279,7 +290,6 @@ export const MapView: React.FC = () => {
           maxZoomLevel={20}
           onPress={handleParcelPress}
         >
-          {/* Fill layer - parcel polygons */}
           <MapboxGL.FillLayer
             id="parcels-fill"
             sourceLayerID="parcels"
@@ -290,7 +300,6 @@ export const MapView: React.FC = () => {
             }}
           />
 
-          {/* Outline layer */}
           <MapboxGL.LineLayer
             id="parcels-outline"
             sourceLayerID="parcels"
@@ -302,7 +311,7 @@ export const MapView: React.FC = () => {
             }}
           />
 
-          {/* Highlight selected parcel - ALWAYS show if selected */}
+          {/* Highlight — shown for both map-tap and search selections */}
           {selectedParcel && (
             <MapboxGL.LineLayer
               id="parcel-highlight"
@@ -316,21 +325,16 @@ export const MapView: React.FC = () => {
             />
           )}
 
-          {/* Labels */}
           <MapboxGL.SymbolLayer
             id="parcels-label"
             sourceLayerID="parcels"
             minZoomLevel={14}
             style={{
-              // Updated to use the new pre-formatted label from SQL
               textField: ["get", "display_label"],
-
               textSize: 11,
               textColor: "#202124",
               textHaloColor: "#FFFFFF",
               textHaloWidth: 1.5,
-
-              // Optional: Only show label if data exists (prevents "null" text)
               textOpacity: ["case", ["has", "display_label"], 1, 0],
             }}
           />

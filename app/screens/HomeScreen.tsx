@@ -24,7 +24,7 @@ export const HomeScreen: React.FC = () => {
       if (status !== "granted") {
         Alert.alert(
           "Permission Required",
-          "Location permission is required for navigation features"
+          "Location permission is required for navigation features",
         );
         return;
       }
@@ -49,7 +49,7 @@ export const HomeScreen: React.FC = () => {
             lat: newLocation.coords.latitude,
             lng: newLocation.coords.longitude,
           });
-        }
+        },
       );
     } catch (error) {
       console.error("Location error:", error);
@@ -69,7 +69,7 @@ export const HomeScreen: React.FC = () => {
     <View style={styles.container}>
       <MapView />
       <SearchBar />
-      <SearchResultsList />
+      {/* <SearchResultsList /> */}
       <TransportModeSelector />
       <ParcelDetailsSheet />
       <RouteInstructions />
