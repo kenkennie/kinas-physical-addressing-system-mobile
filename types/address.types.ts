@@ -77,6 +77,15 @@ export const RouteRequestSchema = z.object({
   preferred_entry_point: z.number().optional(),
 });
 
+export const SuggestionItemSchema = z.object({
+  gid: z.number(),
+  lr_no: z.string(),
+  short_name: z.string().nullable(),
+  constituency: z.string().nullable(),
+  area: z.number(),
+  administrative_name: z.string().nullable(),
+});
+
 export const RouteResponseSchema = z.object({
   destination: z.object({
     parcel: ParcelSchema,
@@ -112,3 +121,4 @@ export type ParcelDetails = z.infer<typeof ParcelDetailsSchema>;
 export type TransportMode = z.infer<typeof TransportModeSchema>;
 export type RouteRequest = z.infer<typeof RouteRequestSchema>;
 export type RouteResponse = z.infer<typeof RouteResponseSchema>;
+export type SuggestionItem = z.infer<typeof SuggestionItemSchema>;

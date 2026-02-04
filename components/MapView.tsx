@@ -108,7 +108,7 @@ export const MapView: React.FC = () => {
 
     try {
       setLoading(true);
-      const data = await apiService.getParcelByGid(lat, lng);
+      const data = await apiService.getParcelByByLatLong(lat, lng);
       setSelectedParcel(data);
       // Zoom is now handled by the useEffect above — no need to call
       // setCamera here anymore.  Kept setSelectedParcel so the effect fires.

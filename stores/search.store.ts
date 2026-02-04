@@ -1,15 +1,5 @@
-// FILE PATH: stores/search.store.ts
-
+import { SuggestionItem } from "@/types/address.types";
 import { create } from "zustand";
-
-// ──────────────────────────────────────────────────────────────────────────
-// Rich suggestion type matching the backend response
-// ──────────────────────────────────────────────────────────────────────────
-export interface SuggestionItem {
-  lr_no: string;
-  short_name: string | null;
-  constituency: string | null;
-}
 
 interface SearchState {
   query: string;
@@ -20,7 +10,7 @@ interface SearchState {
   removeRecentSearch: (search: string) => void;
   clearRecentSearches: () => void;
 
-  suggestions: SuggestionItem[]; // ← changed from string[]
+  suggestions: SuggestionItem[];
   setSuggestions: (suggestions: SuggestionItem[]) => void;
 
   isSearching: boolean;

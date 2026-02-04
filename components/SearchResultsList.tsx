@@ -20,13 +20,13 @@ export const SearchResultsList: React.FC = () => {
   if (searchResults.length === 0) return null;
 
   const handleSelectParcel = async (lr_no: string) => {
-    try {
-      const details = await apiService.getParcelDetails(lr_no);
-      setSelectedParcel(details);
-      setSearchResults([]);
-    } catch (error) {
-      console.error("Error fetching parcel details:", error);
-    }
+    // try {
+    //   const details = await apiService.getParcelDetails(lr_no);
+    //   setSelectedParcel(details);
+    //   setSearchResults([]);
+    // } catch (error) {
+    //   console.error("Error fetching parcel details:", error);
+    // }
   };
 
   return (

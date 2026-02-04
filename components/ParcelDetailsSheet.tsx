@@ -40,7 +40,6 @@ interface AdministrativeBlock {
 interface Parcel {
   gid: string;
   lr_no: string;
-  area: number;
 }
 
 interface SelectedParcelData {
@@ -203,7 +202,8 @@ export const ParcelDetailsSheet: React.FC = () => {
       await Share.share({
         message:
           `Parcel: ${displayTitle(selectedParcel)}\n` +
-          `Area: ${selectedParcel.parcel.area} hectares`,
+          `Constituency: ${selectedParcel.administrative_block?.constituen}` +
+          `\nLocation: ${selectedParcel.administrative_block?.name}\n`,
       });
     } catch (error) {
       console.error(error);
@@ -281,7 +281,7 @@ export const ParcelDetailsSheet: React.FC = () => {
             style={styles.content}
             showsVerticalScrollIndicator={false}
           >
-            {/* Location / Constituency / Area */}
+            {/* Location / Constituency  */}
             <View style={styles.section}>
               {selectedParcel.administrative_block && (
                 <>
@@ -299,11 +299,6 @@ export const ParcelDetailsSheet: React.FC = () => {
                   )}
                 </>
               )}
-              <InfoRow
-                icon="square-outline"
-                label="Area"
-                value={`${selectedParcel.parcel.area} hectares`}
-              />
             </View>
 
             {/* Access / Entry points */}

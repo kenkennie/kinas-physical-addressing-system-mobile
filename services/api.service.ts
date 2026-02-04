@@ -6,6 +6,8 @@ import {
   TransportMode,
   Coordinate,
   RouteResponse,
+  ParcelDetails,
+  SuggestionItemSchema,
 } from "@/types/address.types";
 import { SuggestionItem } from "@/stores/search.store";
 import z from "zod";
@@ -49,17 +51,7 @@ class ApiService {
     );
   }
 
-  async findParcelAtPoint(lat: number, lng: number) {
-    const response = await fetch(
-      `${API_CONFIG.BASE_URL}/land-parcel/at-point?lat=${lat}&lng=${lng}`,
-    );
-    if (!response.ok) {
-      throw new Error("No parcel at this location");
-    }
-    return response.json(); // Returns { gid: number }
-  }
-
-  async getParcelByGid(lat: number, lng: number) {
+  async getParcelByByLatLong(lat: number, lng: number) {
     const response = await this.client.post("land-parcel/identify", {
       lat,
       lng,
@@ -69,7 +61,11 @@ class ApiService {
     return ParcelDetailsSchema.parse(response.data);
   }
 
-  // services/api.service.ts
+  async getParcelByGid(gid: number): Promise<ParcelDetails> {
+    const response = await this.client.get(`/land-parcel/${gid}`); // ← FIXED
+    return ParcelDetailsSchema.parse(response.data);
+  }
+
   async searchAddress(params: {
     lr_no?: string;
     physical_address?: string;
@@ -81,32 +77,21 @@ class ApiService {
     return z.array(ParcelDetailsSchema).parse(response.data);
   }
 
-  // Add suggestion endpoint
-  async getSuggestions(query: string): Promise<SuggestionItem[]> {
+  async getSuggestions(query: string): Promise<SuggestionItem> {
     try {
       const response = await this.client.get("/land-parcel/suggestions", {
         params: { q: query, limit: 5 },
       });
-
-      return z
-        .array(
-          z.object({
-            lr_no: z.string(),
-            short_name: z.string().nullable(),
-            constituency: z.string().nullable(),
-          }),
-        )
-        .parse(response.data);
+      return z.array(SuggestionItemSchema).parse(response.data);
     } catch (error) {
-      // If suggestions endpoint doesn't exist yet, return empty array
-      console.log("Suggestions not available");
+      console.log("Suggestions not available:", error);
       return [];
     }
   }
 
-  async getParcelDetails(gid: number) {
-    const response = await this.client.get(`/land-parcel/parcel/${gid}`);
-    return ParcelDetailsSchema.parse(response.data);
+  // Alias for backwards compatibility if needed
+  async getParcelDetails(gid: number): Promise<ParcelDetails> {
+    return this.getParcelByGid(gid);
   }
 
   async identifyParcel(lat: number, lng: number) {

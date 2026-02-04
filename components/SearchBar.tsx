@@ -1,6 +1,6 @@
 // FILE PATH: components/SearchBar.tsx
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View,
   TextInput,
@@ -30,6 +30,11 @@ export const SearchBar: React.FC<SearchBarProps> = ({
     "origin" | "destination" | null
   >(null);
 
+  // ──────────────────────────────────────────────────────────────────────────
+  // FIX 1: Add ref to prevent race conditions during selection
+  // ──────────────────────────────────────────────────────────────────────────
+  const isSelectingRef = useRef(false);
+
   const {
     query,
     setQuery,
@@ -55,7 +60,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
   const [destinationText, setDestinationText] = useState("");
 
   // ──────────────────────────────────────────────────────────────────────────
-  // Debounced auto-suggestions — now returns rich objects
+  // Debounced auto-suggestions
   // ──────────────────────────────────────────────────────────────────────────
   const fetchSuggestions = useCallback(
     debounce(async (searchQuery: string) => {
@@ -66,7 +71,6 @@ export const SearchBar: React.FC<SearchBarProps> = ({
       try {
         setIsSearching(true);
         const results = await apiService.getSuggestions(searchQuery);
-
         setSuggestions(results);
       } catch (error) {
         console.error("Suggestions error:", error);
@@ -79,7 +83,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
   );
 
   useEffect(() => {
-    if (isFocused) {
+    if (isFocused && !isSelectingRef.current) {
       fetchSuggestions(query);
     }
     return () => {
@@ -88,9 +92,9 @@ export const SearchBar: React.FC<SearchBarProps> = ({
   }, [query, isFocused]);
 
   // ──────────────────────────────────────────────────────────────────────────
-  // Search execution — keyboard enter or suggestion tap
+  // FUZZY SEARCH - keyboard enter without selecting suggestion
   // ──────────────────────────────────────────────────────────────────────────
-  const handleSearch = async (searchQuery: string) => {
+  const handleFuzzySearch = async (searchQuery: string) => {
     if (!searchQuery.trim()) return;
 
     try {
@@ -107,16 +111,16 @@ export const SearchBar: React.FC<SearchBarProps> = ({
       if (results && results.length > 0) {
         setSelectedParcel(results[0]);
         addRecentSearch(searchQuery);
+
+        // FIX 2: Keep the query visible, just close dropdown
+        setIsFocused(false);
+        setSuggestions([]);
       } else {
         Alert.alert(
           "No Results",
           `No parcel found for "${searchQuery}". Please check the LR number and try again.`,
         );
       }
-
-      setIsFocused(false);
-      setQuery("");
-      setSuggestions([]);
     } catch (error) {
       setError("Failed to search. Please try again.");
       console.error("Search error:", error);
@@ -130,26 +134,74 @@ export const SearchBar: React.FC<SearchBarProps> = ({
   };
 
   // ──────────────────────────────────────────────────────────────────────────
-  // Suggestion selected → populate search box, then search
+  // DIRECT LOOKUP - suggestion tap (we have gid)
+  // FIX 3: Proper async handling with ref to prevent race conditions
   // ──────────────────────────────────────────────────────────────────────────
-  const handleSelectSuggestion = (suggestion: SuggestionItem) => {
-    setQuery(suggestion.lr_no);
-    handleSearch(suggestion.lr_no);
+  const handleSelectSuggestion = async (suggestion: SuggestionItem) => {
+    try {
+      // Set flag to prevent blur from interfering
+      isSelectingRef.current = true;
+
+      setLoading(true);
+      setError(null);
+
+      // FIX 4: Set query FIRST so it shows in search box
+      setQuery(suggestion.lr_no);
+
+      // Dismiss keyboard
+      Keyboard.dismiss();
+
+      // Direct GID lookup
+      const parcelData = await apiService.getParcelByGid(suggestion.gid);
+
+      if (parcelData) {
+        setSelectedParcel(parcelData);
+        addRecentSearch(suggestion.lr_no);
+      } else {
+        Alert.alert("Error", "Could not load parcel details.");
+      }
+
+      // FIX 5: Now close dropdown but KEEP query visible
+      setIsFocused(false);
+      setSuggestions([]);
+    } catch (error) {
+      setError("Failed to load parcel.");
+      console.error("Direct lookup error:", error);
+      Alert.alert("Error", "Could not load parcel details. Please try again.");
+    } finally {
+      setLoading(false);
+      isSelectingRef.current = false;
+    }
   };
 
   // ──────────────────────────────────────────────────────────────────────────
-  // Recent search selected
+  // Recent search - use fuzzy search
   // ──────────────────────────────────────────────────────────────────────────
-  const handleSelectRecent = (recent: string) => {
-    console.log("===============handleSelectRecent=====================");
-    console.log(recent);
-    console.log("==============handleSelectRecent======================");
+  const handleSelectRecent = async (recent: string) => {
+    // Set flag
+    isSelectingRef.current = true;
+
     setQuery(recent);
-    handleSearch(recent);
+    await handleFuzzySearch(recent);
+
+    isSelectingRef.current = false;
   };
 
   // ──────────────────────────────────────────────────────────────────────────
-  // Dropdown rendering — rich suggestion cards
+  // FIX 6: Better blur handling - check if we're in the middle of selecting
+  // ──────────────────────────────────────────────────────────────────────────
+  const handleBlur = () => {
+    if (!isSelectingRef.current) {
+      setTimeout(() => {
+        if (!isSelectingRef.current) {
+          setIsFocused(false);
+        }
+      }, 200);
+    }
+  };
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Dropdown rendering
   // ──────────────────────────────────────────────────────────────────────────
   const renderDropdownContent = () => {
     // Rich suggestions
@@ -159,11 +211,13 @@ export const SearchBar: React.FC<SearchBarProps> = ({
           <Text style={styles.dropdownHeader}>Suggestions</Text>
           <FlatList
             data={suggestions}
-            keyExtractor={(item, index) => `suggestion-${index}-${item.lr_no}`}
+            keyExtractor={(item) => `suggestion-${item.gid}`}
+            keyboardShouldPersistTaps="handled"
             renderItem={({ item }) => (
               <TouchableOpacity
                 style={styles.suggestionCard}
                 onPress={() => handleSelectSuggestion(item)}
+                activeOpacity={0.7}
               >
                 <View style={styles.suggestionLeft}>
                   <View style={styles.suggestionIconContainer}>
@@ -194,7 +248,9 @@ export const SearchBar: React.FC<SearchBarProps> = ({
                         </>
                       )}
                       <Text style={styles.suggestionMetaText}>•</Text>
-                      <Text style={styles.suggestionMetaText}></Text>
+                      <Text style={styles.suggestionMetaText}>
+                        {item.area.toFixed(2)} ha
+                      </Text>
                     </View>
                   </View>
                 </View>
@@ -232,10 +288,12 @@ export const SearchBar: React.FC<SearchBarProps> = ({
           <FlatList
             data={recentSearches}
             keyExtractor={(item, index) => `recent-${index}-${item}`}
+            keyboardShouldPersistTaps="handled"
             renderItem={({ item }) => (
               <TouchableOpacity
                 style={styles.dropdownItem}
                 onPress={() => handleSelectRecent(item)}
+                activeOpacity={0.7}
               >
                 <Ionicons
                   name="time-outline"
@@ -322,7 +380,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
                 onChangeText={setDestinationText}
                 onFocus={() => setFocusedInput("destination")}
                 onBlur={() => setFocusedInput(null)}
-                onSubmitEditing={() => handleSearch(destinationText)}
+                onSubmitEditing={() => handleFuzzySearch(destinationText)}
                 returnKeyType="search"
               />
               {destinationText.length > 0 && (
@@ -377,8 +435,8 @@ export const SearchBar: React.FC<SearchBarProps> = ({
             value={query}
             onChangeText={setQuery}
             onFocus={() => setIsFocused(true)}
-            onBlur={() => setTimeout(() => setIsFocused(false), 200)}
-            onSubmitEditing={() => handleSearch(query)}
+            onBlur={handleBlur}
+            onSubmitEditing={() => handleFuzzySearch(query)}
             returnKeyType="search"
             autoCapitalize="none"
             autoCorrect={false}
@@ -421,9 +479,6 @@ export const SearchBar: React.FC<SearchBarProps> = ({
   );
 };
 
-// ──────────────────────────────────────────────────────────────────────────
-// Styles
-// ──────────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: {
     position: "absolute",
@@ -454,7 +509,6 @@ const styles = StyleSheet.create({
   input: { flex: 1, fontSize: 15, color: "#202124" },
   clearButton: { padding: 4 },
   micButton: { padding: 6 },
-
   dropdown: {
     backgroundColor: "#FFF",
     borderRadius: 12,
@@ -477,8 +531,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 4,
   },
-
-  // Rich suggestion card
   suggestionCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -520,8 +572,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#5F6368",
   },
-
-  // Simple dropdown item (recent searches)
   dropdownItem: {
     flexDirection: "row",
     alignItems: "center",
@@ -541,8 +591,6 @@ const styles = StyleSheet.create({
   clearText: { fontSize: 13, color: "#1A73E8", fontWeight: "500" },
   recentActions: { flexDirection: "row", gap: 4 },
   deleteButton: { padding: 4 },
-
-  // Directions mode
   directionsBox: {
     flexDirection: "row",
     alignItems: "center",
