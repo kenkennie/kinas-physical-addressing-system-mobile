@@ -42,10 +42,11 @@
       [
         "@rnmapbox/maps",
         {
-          "RNMapboxMapsVersion": "11.0.0",
-          "RNMAPBOX_MAPS_DOWNLOAD_TOKEN": "pk.eyJ1Ijoia2VubmllMjUyNSIsImEiOiJjbWs2bzEwNXUwbmZjM2VzaHQ1OWs3cjdzIn0.hOjIiVZZdyTV1RyP8ZXG_w"
+          "RNMAPBOX_MAPS_DOWNLOAD_TOKEN": "sk.eyJ1Ijoia2VubmllMjUyNSIsImEiOiJjbWxob2tiejcwM3Q3M2VxczFwemZpcXc1In0.keZisNQRNAAzl2WRZTKNPg",
+          "RNMapboxMapsDownloadToken": "sk.eyJ1Ijoia2VubmllMjUyNSIsImEiOiJjbWxob2tiejcwM3Q3M2VxczFwemZpcXc1In0.keZisNQRNAAzl2WRZTKNPg"
         }
-      ]
+      ],
+      "expo-router"
     ],
     "experiments": {
       "typedRoutes": true,
